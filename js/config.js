@@ -3,17 +3,17 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.0.0',
+  version: '1.0.1',
 
   // Microsoft Entra (registro de la app, tipo SPA)
-  tenantId: 'COMPLETAR_TENANT_ID',
-  clientId: 'COMPLETAR_CLIENT_ID',
+  tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
+  clientId: '6accec4b-39ef-40c6-9bd8-f861b007bb38',
   scopes: ['User.Read', 'Sites.ReadWrite.All', 'Files.ReadWrite.All'],
 
   // Sitio de SharePoint del piloto, ej. host 'alongersrl.sharepoint.com', ruta '/sites/RemitosCampo'
   sitio: {
-    host: 'COMPLETAR.sharepoint.com',
-    ruta: '/sites/COMPLETAR',
+    host: 'alongercomar.sharepoint.com',
+    ruta: '/sites/RemitosCampo',
   },
 
   // Nombres de listas y biblioteca que crea la pantalla de Configuración
@@ -26,4 +26,5 @@ export const CONFIG = {
 // Sin Entra configurado (o con ?demo=1) la app corre en modo demostración:
 // guarda en el navegador y simula la planilla, para probar la interfaz.
 export const MODO_DEMO =
-  CONFIG.clientId.startsWith('COMPLETAR') || new URLSearchParams(location.search).has('demo');
+  CONFIG.clientId.startsWith('COMPLETAR') || CONFIG.sitio.host.startsWith('COMPLETAR') ||
+  new URLSearchParams(location.search).has('demo');
