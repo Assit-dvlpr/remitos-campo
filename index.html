@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Remitos de Campo</title>
+  <meta name="description" content="Carga de remitos de campo de Alonger SRL">
+  <meta name="theme-color" content="#009898">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="img/alo.jpg">
+  <link rel="apple-touch-icon" href="img/alo.jpg">
+  <link rel="stylesheet" href="styles.css">
+  <script src="vendor/msal-browser-4.30.0.min.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="encabezado">
+    <div class="encabezado-fila">
+      <img class="logo" src="img/logo_alonger.jpg" alt="Alonger — Oil &amp; Gas Specialists" width="939" height="217">
+      <div class="titulo-app">Remitos de Campo</div>
+      <div id="usuario" class="usuario"></div>
+    </div>
+    <nav id="pestanas" class="pestanas" hidden></nav>
+  </header>
+
+  <div id="banner"></div>
+  <main id="vista" class="vista">
+    <p class="cargando-inicial">Cargando…</p>
+  </main>
+
+  <footer class="pie">
+    Remitos de Campo <span id="version"></span> · Desarrollado por Ignacio Burd · Alonger SRL
+  </footer>
+
+  <div id="avisos" class="avisos" aria-live="polite"></div>
+  <div id="modal" class="modal" hidden></div>
+</body>
+</html>

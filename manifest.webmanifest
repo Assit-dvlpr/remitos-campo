@@ -1,0 +1,15 @@
+{
+  "name": "Remitos de Campo — Alonger",
+  "short_name": "Remitos",
+  "description": "Carga de remitos de campo con foto",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#009898",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "img/alo.jpg", "sizes": "638x640", "type": "image/jpeg", "purpose": "any" }
+  ]
+}
