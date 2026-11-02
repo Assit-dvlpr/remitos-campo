@@ -10,7 +10,10 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  // 'reload': la copia para usar sin señal se arma con lo que está publicado, no con la caché del navegador
+  e.waitUntil(caches.open(VERSION)
+    .then(c => c.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
