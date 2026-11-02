@@ -2,10 +2,11 @@
 // No llama a ningún servicio: recibe lo que hay en la tabla y devuelve qué celdas escribir.
 // Regla: solo se escriben las columnas mapeadas; las demás (fórmulas de precio, etc.) no se tocan.
 
+// Para comparar encabezados y valores: sin acentos, símbolos ni puntos ("N° REMITO" = "N REMITO", "CANT." = "CANT")
 export function norm(s) {
   return String(s ?? '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ').trim().toUpperCase();
+    .replace(/[^A-Za-z0-9]+/g, ' ').trim().toUpperCase();
 }
 
 export function colLetra(n) { // 0 -> A
