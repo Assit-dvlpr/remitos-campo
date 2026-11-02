@@ -77,10 +77,13 @@ export function planificarEscritura({ encabezados, cuerpo, direccion, columnas, 
   const idx = {};
   const faltan = [];
   for (const [campo, nombre] of Object.entries(columnas)) {
+    if (!String(nombre ?? '').trim()) continue; // columna que esta planilla no tiene
     const i = enc.indexOf(norm(nombre));
     if (i < 0) faltan.push(nombre); else idx[campo] = i;
   }
   if (faltan.length) return { error: 'La planilla no tiene estas columnas: ' + faltan.join(', ') };
+  const sinMapear = ['remito', 'item', 'cant'].filter(k => idx[k] === undefined);
+  if (sinMapear.length) return { error: 'Falta indicar en Configuración la columna de: ' + sinMapear.join(', ') };
   if (!filas.length) return { error: 'El remito no tiene ítems para la planilla.' };
 
   const d = parseDireccion(direccion);

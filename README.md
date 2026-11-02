@@ -1,6 +1,6 @@
 # Remitos de Campo — Alonger SRL
 
-**Versión 1.1.0** · Desarrollado por Ignacio Burd
+**Versión 1.2.0** · Desarrollado por Ignacio Burd
 
 App web para que el técnico cargue el remito en campo (servicios y foto del remito firmado) y la oficina solo lo revise.
 Al aprobarlo se escriben las filas en el Excel del cliente. Piloto: **Oldelval**.
@@ -95,8 +95,14 @@ Cambiar el código, subir `version` en `js/config.js` y `VERSION` en `sw.js` (as
 git commit -am "x.y.z: qué cambió" && git push
 ```
 
+## Sumar otro cliente
+Configuración → 3 → **+ Nuevo cliente**: nombre, vínculo de su Excel (subido a SharePoint/OneDrive), tabla de carga,
+tabla de ítems (tarifas) y, si tiene, hoja y rango de establecimientos. En "Columnas de la planilla" van los
+encabezados tal cual; los que su planilla no tenga se dejan vacíos (N° de remito, Ítem y Cantidad son obligatorios).
+Sin establecimientos, el técnico escribe el lugar a mano. Con más de un cliente, el técnico elige el cliente al cargar.
+
 ## Límites conocidos (piloto)
-- Un solo cliente configurado (Oldelval). Otro cliente = otro bloque en la configuración con su Excel y columnas.
+- Cada planilla tiene que tener una tabla de ítems (código + servicio) y una tabla de carga con una fila por servicio.
 - OC, HES y factura no entran todavía.
 - Los roles se controlan en la app; el acceso real a los datos lo dan los permisos del sitio de SharePoint.
 - El papel firmado sigue siendo el original.

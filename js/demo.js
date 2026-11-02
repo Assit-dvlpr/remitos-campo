@@ -59,8 +59,8 @@ export const api = {
     return { email: 'demo@alonger.com.ar', displayName: 'Usuario Demo', nombre: 'Técnico Demo', rol: 'Admin' };
   },
 
-  async leerClientes() { return CLIENTES_DEMO; },
-  async guardarClientes() {},
+  async leerClientes() { return leer().clientes || CLIENTES_DEMO; },
+  async guardarClientes(clientes) { const d = leer(); d.clientes = clientes; guardar(d); },
 
   async buscarRemito(nro) { return leer().remitos.find(r => r.remito === nro) || null; },
 
@@ -135,5 +135,8 @@ export const api = {
   async agregarUsuario() {},
   async urlLista() { return null; },
   async resolverExcel() { throw new Error('En modo demo no se vincula un Excel real.'); },
-  async leerCatalogo() { return CLIENTES_DEMO.demo; },
+  async leerCatalogo(excel, lectura) {
+    const c = CLIENTES_DEMO.demo;
+    return { items: c.items.filter(i => i.cod !== 'KM'), establecimientos: lectura?.hojaEstab ? c.establecimientos : [] };
+  },
 };

@@ -421,7 +421,8 @@ export const api = {
   async leerCatalogo(excel, { tablaTarifas, hojaEstab, rangoEstab }) {
     return conSesion(excel, async h => {
       const tar = (await g(`${wb(excel)}/tables('${comillas(tablaTarifas)}')/range?$select=values`, { headers: h })).values;
-      const est = await leerRango(excel, hojaEstab, rangoEstab, h);
+      // Establecimientos opcionales: sin hoja o rango, el técnico escribe el lugar a mano
+      const est = hojaEstab && rangoEstab ? await leerRango(excel, hojaEstab, rangoEstab, h) : [];
       return {
         items: tar.slice(1).filter(f => f[0] !== '' && f[1] !== '').map(f => ({ cod: f[0], servicio: String(f[1]).trim(), planilla: true })),
         // Se corta en la primera fila vacía: debajo suele haber otra tabla de la misma hoja

@@ -62,10 +62,10 @@ export async function vistaNuevo(vista) {
           <div><label for="f-tecnico">Técnico</label><input id="f-tecnico" value="${esc(b.tecnico)}"></div>
         </div>
         <label for="f-estab">Establecimiento</label>
-        <select id="f-estab">
+        ${cli.establecimientos?.length ? `<select id="f-estab">
           <option value="">Elegir…</option>
           ${cli.establecimientos.map(e => `<option ${e.nombre === b.establecimiento ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}
-        </select>
+        </select>` : `<input id="f-estab" value="${esc(b.establecimiento)}" placeholder="Lugar del trabajo">`}
         <p class="ayuda" id="zona">${est ? `Zona <span class="chip">${esc(est.zona)}</span>` : ''}</p>
       </section>
 
@@ -138,9 +138,9 @@ export async function vistaNuevo(vista) {
     on('#f-fecha', 'change', e => { b.fechaRemito = e.target.value; guardarBorrador(); });
     on('#f-tecnico', 'input', e => { b.tecnico = e.target.value; guardarBorrador(); });
     on('#f-obs', 'input', e => { b.observaciones = e.target.value; guardarBorrador(); });
-    on('#f-estab', 'change', e => {
+    on('#f-estab', 'input', e => {
       b.establecimiento = e.target.value;
-      const est = estado.clientes[b.cliente].establecimientos.find(x => x.nombre === b.establecimiento);
+      const est = (estado.clientes[b.cliente].establecimientos || []).find(x => x.nombre === b.establecimiento);
       $('#zona', vista).innerHTML = est ? `Zona <span class="chip">${esc(est.zona)}</span>` : '';
       guardarBorrador();
     });

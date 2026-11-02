@@ -62,8 +62,9 @@ async function detalle(vista, id) {
             <div><label for="f-periodo">Período</label><input id="f-periodo" type="month" value="${esc(r.periodo)}"></div>
           </div>
           <label for="f-estab">Establecimiento</label>
-          <select id="f-estab">${cli.establecimientos.map(e => `<option ${e.nombre === r.establecimiento ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}
-            ${cli.establecimientos.some(e => e.nombre === r.establecimiento) ? '' : `<option selected>${esc(r.establecimiento)}</option>`}</select>
+          ${cli.establecimientos?.length ? `<select id="f-estab">${cli.establecimientos.map(e => `<option ${e.nombre === r.establecimiento ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}
+            ${cli.establecimientos.some(e => e.nombre === r.establecimiento) ? '' : `<option selected>${esc(r.establecimiento)}</option>`}</select>`
+            : `<input id="f-estab" value="${esc(r.establecimiento)}">`}
           <p class="ayuda" id="zona">Zona <span class="chip">${esc(r.zona)}</span></p>
         </section>
         <section class="tarjeta">
@@ -89,8 +90,8 @@ async function detalle(vista, id) {
     </div>`;
 
   conectarServicios($('#servicios', vista), cant);
-  $('#f-estab', vista).addEventListener('change', e => {
-    const est = cli.establecimientos.find(x => x.nombre === e.target.value);
+  $('#f-estab', vista).addEventListener('input', e => {
+    const est = (cli.establecimientos || []).find(x => x.nombre === e.target.value);
     r.zona = est?.zona || r.zona;
     $('#zona', vista).innerHTML = `Zona <span class="chip">${esc(r.zona)}</span>`;
   });
