@@ -1,6 +1,6 @@
 # Remitos de Campo — Alonger SRL
 
-**Versión 1.3.0** · Desarrollado por Ignacio Burd
+**Versión 1.4.0** · Desarrollado por Ignacio Burd
 
 App web para que el técnico cargue el remito en campo (servicios y foto del remito firmado) y la oficina solo lo revise.
 Al aprobarlo se escriben las filas en el Excel del cliente. Piloto: **Oldelval**.
@@ -59,6 +59,12 @@ ve el motivo y toca **Corregir**.
 **Revisor**: Revisión → abre un remito → foto a la izquierda, datos a la derecha → corrige lo que haga falta,
 completa fecha de solicitud y período → **Aprobar y pasar al Excel** (o **Rechazar** con comentario).
 Lo que corrige el revisor tiene prioridad sobre lo que cargó el técnico.
+
+## Revisión
+- Los servicios que cargó el técnico aparecen primero y resaltados; el resto, en "Agregar otro servicio".
+- **Foto del remito:** se puede tocar cada foto para recortarla, girarla o mejorarla, o agregar otra. Al guardar
+  (o al aprobar) se regenera el PDF. Las fotos originales quedan en `Remitos Escaneados/<Cliente>/<Año>/<Mes>/_originales/`.
+  Los remitos cargados antes de la 1.4.0 no tienen originales: se puede agregar una foto nueva para reemplazar el PDF.
 
 ## Dónde quedan los PDF
 - **Mientras se revisa:** biblioteca *Remitos Escaneados* del sitio, `Oldelval/2026/10 - Octubre/`.

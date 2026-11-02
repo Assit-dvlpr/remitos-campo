@@ -79,6 +79,14 @@ export const api = {
     const previo = d.remitos.find(r => r.id === id);
     const nuevo = { ...previo, ...e.datos, id, idLocal: e.idLocal, estado: 'Pendiente', comentario: '', creado: previo?.creado || new Date().toISOString() };
     if (e.pdf) { d.pdfs[id] = await blobADataUrl(e.pdf); nuevo.archivoId = id; }
+    if (e.paginas?.length) {
+      nuevo.paginas = [];
+      for (const [i, p] of e.paginas.entries()) {
+        const fid = `${id}-p${i + 1}`;
+        d.pdfs[fid] = await blobADataUrl(p.blob);
+        nuevo.paginas.push({ archivoId: fid, giro: p.giro || 0, recorte: p.recorte || null, mejorar: !!p.mejorar });
+      }
+    }
     d.remitos = d.remitos.filter(r => r.id !== id).concat(nuevo);
     guardar(d);
   },
@@ -95,6 +103,26 @@ export const api = {
   async pdf(remito) {
     const u = leer().pdfs[remito.archivoId];
     return u ? (await fetch(u)).blob() : null;
+  },
+
+  async fotoOriginal(pagina) {
+    return (await fetch(leer().pdfs[pagina.archivoId])).blob();
+  },
+
+  async subirFotoOriginal(remito, blob) {
+    const d = leer();
+    const fid = `${remito.id}-p${Date.now()}`;
+    d.pdfs[fid] = await blobADataUrl(blob);
+    guardar(d);
+    return fid;
+  },
+
+  async reemplazarPdf(remito, pdf) {
+    const d = leer();
+    const id = remito.archivoId || remito.id;
+    d.pdfs[id] = await blobADataUrl(pdf);
+    guardar(d);
+    return { archivoId: id, archivoUrl: remito.archivoUrl || '' };
   },
 
   async actualizar(remito) {

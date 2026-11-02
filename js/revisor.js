@@ -5,6 +5,8 @@ import {
   htmlServicios, conectarServicios,
 } from './app.js';
 import { completarAutomaticos } from './excel.js';
+import { editarFoto, miniatura } from './fotos.js';
+import { prepararFoto, armarPdf } from './pdf.js';
 
 let urlPdf = null;
 
@@ -77,8 +79,18 @@ async function detalle(vista, id) {
           <p class="ayuda" id="autos"></p>
         </section>
         <section class="tarjeta">
+          <h2>Foto del remito</h2>
+          <div class="fotos fotos-revision" id="fotos-rev"></div>
+          <p class="ayuda" id="fotos-ayuda"></p>
+          <div class="acciones">
+            <label class="boton subir-foto">Agregar foto<input type="file" accept="image/*" id="f-agregar-foto"></label>
+            <button id="btn-guardar-foto" disabled>Guardar foto</button>
+          </div>
+        </section>
+        <section class="tarjeta">
           <h2>Servicios</h2>
-          <div id="servicios">${htmlServicios(cli.items, cant)}</div>
+          <p class="ayuda" style="margin:-4px 0 8px">Resaltado: lo que cargó el técnico.</p>
+          <div id="servicios">${htmlServicios(cli.items, cant, { separarCargados: true })}</div>
           ${r.observaciones ? `<label>Observaciones del técnico</label><p style="margin:0">${esc(r.observaciones)}</p>` : ''}
         </section>
         <section class="tarjeta">
@@ -116,15 +128,101 @@ async function detalle(vista, id) {
   vista.querySelectorAll('[data-extra]').forEach(s => s.addEventListener('input', pintarAutos));
   pintarAutos();
 
-  // Foto
-  if (urlPdf) URL.revokeObjectURL(urlPdf);
-  estado.api.pdf(r).then(blob => {
-    const visor = $('#visor', vista);
-    if (!visor) return;
-    if (!blob) { visor.innerHTML = '<p class="vacio">El remito no tiene foto.</p>'; return; }
-    urlPdf = URL.createObjectURL(blob);
-    visor.innerHTML = `<iframe src="${urlPdf}#view=FitH" title="Remito escaneado"></iframe>`;
-  }).catch(e => { $('#visor', vista).innerHTML = `<div class="mensaje error">${esc(e.message)}</div>`; });
+  // Visor del PDF
+  const cargarVisor = blobDirecto => {
+    if (urlPdf) URL.revokeObjectURL(urlPdf);
+    (blobDirecto ? Promise.resolve(blobDirecto) : estado.api.pdf(r)).then(blob => {
+      const visor = $('#visor', vista);
+      if (!visor) return;
+      if (!blob) { visor.innerHTML = '<p class="vacio">El remito no tiene foto.</p>'; return; }
+      urlPdf = URL.createObjectURL(blob);
+      visor.innerHTML = `<iframe src="${urlPdf}#view=FitH" title="Remito escaneado"></iframe>`;
+    }).catch(e => { $('#visor', vista).innerHTML = `<div class="mensaje error">${esc(e.message)}</div>`; });
+  };
+  cargarVisor();
+
+  // Fotos originales: retocar (recorte, giro, mejora) o agregar, y regenerar el PDF
+  let fotos = (r.paginas || []).map(m => ({ ...m, blob: null }));
+  let fotosCambiadas = false;
+  const ayudaFotos = () => {
+    $('#fotos-ayuda', vista).textContent = fotos.length
+      ? 'Tocá una foto para recortarla, girarla o mejorarla.' + (fotosCambiadas ? ' Hay cambios sin guardar.' : '')
+      : (r.archivoId ? 'Este remito se cargó antes de guardar las fotos originales: no se puede retocar, pero podés agregar una foto nueva para reemplazar el PDF.' : '');
+    $('#btn-guardar-foto', vista).disabled = !fotosCambiadas || !fotos.length;
+  };
+  async function pintarFotos() {
+    const cont = $('#fotos-rev', vista);
+    cont.innerHTML = '';
+    for (const [i, f] of fotos.entries()) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'foto' + (f.cambiada ? ' cambiada' : '');
+      btn.innerHTML = `<span class="num">${i + 1}</span>`;
+      btn.onclick = async () => {
+        if (!f.blob) return;
+        const original = { blob: f.blob, giro: f.giro, recorte: f.recorte, mejorar: f.mejorar };
+        const editada = await editarFoto(original);
+        if (editada === original) return; // canceló
+        if (editada === null) fotos.splice(i, 1);
+        else Object.assign(f, editada, { cambiada: true });
+        fotosCambiadas = true;
+        pintarFotos();
+      };
+      cont.append(btn);
+      (async () => {
+        try {
+          if (!f.blob) f.blob = await estado.api.fotoOriginal(f);
+          const im = new Image();
+          im.src = await miniatura(f);
+          im.alt = 'Foto ' + (i + 1);
+          btn.prepend(im);
+        } catch { btn.insertAdjacentHTML('beforeend', '<span class="ayuda">No se pudo cargar</span>'); }
+      })();
+    }
+    ayudaFotos();
+  }
+  pintarFotos();
+
+  $('#f-agregar-foto', vista).addEventListener('change', async e => {
+    const archivo = e.target.files[0];
+    e.target.value = '';
+    if (!archivo) return;
+    const blob = await prepararFoto(archivo);
+    const editada = await editarFoto({ blob, giro: 0, recorte: { x: 0, y: 0, w: 1, h: 1 }, mejorar: true });
+    if (!editada) return;
+    fotos.push({ ...editada, nueva: true, cambiada: true });
+    fotosCambiadas = true;
+    pintarFotos();
+  });
+
+  // Sube las fotos nuevas, regenera el PDF y lo reemplaza. Devuelve los datos de archivo actualizados.
+  async function guardarFotos() {
+    if (!fotosCambiadas || !fotos.length) return {};
+    if (fotos.some(f => !f.blob)) throw new Error('Esperá a que terminen de cargar las fotos.');
+    for (const f of fotos.filter(x => x.nueva)) {
+      f.archivoId = await estado.api.subirFotoOriginal({ ...r, clienteNombre: cli.nombre }, f.blob);
+      f.nueva = false;
+    }
+    const pdf = await armarPdf(fotos);
+    const arch = await estado.api.reemplazarPdf({ ...r, clienteNombre: cli.nombre }, pdf);
+    Object.assign(r, arch);
+    r.paginas = fotos.map(f => ({ archivoId: f.archivoId, giro: f.giro || 0, recorte: f.recorte || null, mejorar: !!f.mejorar }));
+    fotos.forEach(f => { f.cambiada = false; });
+    fotosCambiadas = false;
+    cargarVisor(pdf);
+    pintarFotos();
+    return { ...arch, paginas: r.paginas };
+  }
+
+  $('#btn-guardar-foto', vista).onclick = async () => {
+    ocupado(true);
+    try {
+      const cambios = await guardarFotos();
+      await estado.api.actualizar({ ...leer(), ...cambios });
+      aviso('Foto actualizada.', 'ok');
+    } catch (e) { msg(esc(e.message), 'error'); }
+    finally { ocupado(false); ayudaFotos(); }
+  };
 
   function leer() {
     return {
@@ -147,7 +245,7 @@ async function detalle(vista, id) {
 
   $('#btn-guardar', vista).onclick = async () => {
     ocupado(true);
-    try { await estado.api.actualizar(leer()); aviso('Cambios guardados.', 'ok'); }
+    try { const f = await guardarFotos(); await estado.api.actualizar({ ...leer(), ...f }); aviso('Cambios guardados.', 'ok'); }
     catch (e) { msg(esc(e.message), 'error'); }
     finally { ocupado(false); }
   };
@@ -185,6 +283,8 @@ async function detalle(vista, id) {
     const revision = { ...d, fechaRevision: new Date().toISOString() };
     try {
       // Primero se guardan las correcciones; si el Excel falla, queda "Pendiente Excel" para reintentar
+      // Si se retocó la foto, el PDF nuevo es el que se archiva junto al Excel
+      Object.assign(revision, await guardarFotos());
       await estado.api.actualizar({ ...revision, estado: 'Pendiente Excel', comentario: 'Pasando al Excel…' });
       const filas = await estado.api.escribirExcel(cli, revision);
       // El PDF va a la carpeta del cliente; si falla, el remito igual queda aprobado (el Excel ya se escribió)

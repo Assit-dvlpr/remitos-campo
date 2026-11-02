@@ -42,18 +42,28 @@ export function normalizarRemito(pv, num) {
 }
 
 // Lista de servicios con botones +/-; cant = { cod: número }
-export function htmlServicios(items, cant) {
-  return `<div class="servicios">${items.map(it => {
+// separarCargados (revisión): primero lo que cargó el técnico; el resto en un desplegable para sumar otro
+export function htmlServicios(items, cant, { separarCargados = false } = {}) {
+  const fila = it => {
     const v = +cant[it.cod] || 0;
     const km = it.unidad === 'km' || String(it.cod).toUpperCase() === 'KM';
+    const detalle = km
+      ? (it.planilla === false ? 'Kilómetros recorridos (no va a la planilla)' : `Ítem ${esc(it.cod)} · kilómetros`)
+      : 'Ítem ' + esc(it.cod);
     return `<div class="servicio ${v > 0 ? 'marcado' : ''}" data-cod="${esc(it.cod)}">
-      <div class="nombre">${esc(nombreServicio(it))}<small>${km ? 'Kilómetros recorridos (no va a la planilla)' : 'Ítem ' + esc(it.cod)}</small></div>
+      <div class="nombre">${esc(nombreServicio(it))}<small>${detalle}</small></div>
       <div class="stepper">
         ${km ? '' : '<button type="button" data-paso="-1" aria-label="Restar">−</button>'}
         <input type="number" inputmode="numeric" min="0" class="${km ? 'km' : ''}" value="${v || ''}" placeholder="0" aria-label="Cantidad ${esc(it.servicio)}">
         ${km ? '' : '<button type="button" data-paso="1" aria-label="Sumar">+</button>'}
       </div></div>`;
-  }).join('')}</div>`;
+  };
+  if (!separarCargados) return `<div class="servicios">${items.map(fila).join('')}</div>`;
+  const cargados = items.filter(it => +cant[it.cod] > 0);
+  const resto = items.filter(it => !(+cant[it.cod] > 0));
+  return `<div class="servicios">${cargados.length ? cargados.map(fila).join('') : '<p class="ayuda">El técnico no cargó servicios.</p>'}</div>
+    ${resto.length ? `<details class="otros-servicios"><summary>Agregar otro servicio (${resto.length})</summary>
+      <div class="servicios">${resto.map(fila).join('')}</div></details>` : ''}`;
 }
 
 export function nombreServicio(it) {

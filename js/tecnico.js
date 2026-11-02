@@ -256,10 +256,14 @@ export async function vistaNuevo(vista) {
           tecnicoEmail: estado.usuario.email,
           items,
           extras,
+          // Corrección sin fotos nuevas: se conservan las fotos originales que ya estaban
+          ...(b.paginas.length ? {} : { paginas: b.paginasPrevias || [] }),
           km: kmItem ? +b.cant[kmItem.cod] || 0 : 0,
           observaciones: b.observaciones.trim(),
         },
         pdf: b.paginas.length ? await armarPdf(b.paginas) : null,
+        // Fotos originales con sus ajustes (giro, recorte, mejora), para retocar en la revisión
+        paginas: b.paginas.length ? b.paginas.map(p => ({ blob: p.blob, giro: p.giro, recorte: p.recorte, mejorar: p.mejorar })) : null,
       };
       await cola.guardar(entrada);
       await borrador.borrar();
@@ -343,7 +347,7 @@ export async function vistaMisRemitos(vista) {
         idLocal: r.idLocal || uid(), itemId: r.id, cliente: r.cliente, pv, numero,
         fechaRemito: r.fechaRemito, establecimiento: r.establecimiento, tecnico: r.tecnico,
         cant: Object.fromEntries(r.items.map(i => [i.cod, i.cant])),
-        extras: { ...(r.extras || {}) }, acompanante: '', tecnicoEditado: true,
+        extras: { ...(r.extras || {}) }, acompanante: '', tecnicoEditado: true, paginasPrevias: r.paginas || [],
         observaciones: r.observaciones, paginas: [], archivoPrevio: !!r.archivoId, comentario: r.comentario,
       };
       ir('nuevo');

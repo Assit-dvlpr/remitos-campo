@@ -121,8 +121,9 @@ function aCampos(r) {
     Periodo: r.periodo || '',
     Tecnico: r.tecnico,
     TecnicoEmail: r.tecnicoEmail,
-    // Con campos adicionales se guarda { items, extras }; sin ellos, la lista de ítems sola (formato original)
-    Items: JSON.stringify(r.extras && Object.keys(r.extras).length ? { items: r.items || [], extras: r.extras } : r.items || []),
+    // Con campos adicionales o fotos originales se guarda { items, extras, paginas }; si no, la lista sola (formato original)
+    Items: JSON.stringify((r.extras && Object.keys(r.extras).length) || r.paginas?.length
+      ? { items: r.items || [], extras: r.extras || {}, paginas: r.paginas || [] } : r.items || []),
     Kilometros: +r.km || 0,
     Observaciones: r.observaciones || '',
     Estado: r.estado,
@@ -138,10 +139,10 @@ function aCampos(r) {
 
 function deItem(it) {
   const f = it.fields;
-  let items = [], extras = {};
+  let items = [], extras = {}, paginas = [];
   try {
     const j = JSON.parse(f.Items || '[]');
-    if (Array.isArray(j)) items = j; else ({ items = [], extras = {} } = j);
+    if (Array.isArray(j)) items = j; else ({ items = [], extras = {}, paginas = [] } = j);
   } catch { /* vacío */ }
   return {
     id: it.id,
@@ -156,6 +157,7 @@ function deItem(it) {
     tecnicoEmail: f.TecnicoEmail,
     items,
     extras,
+    paginas,
     km: f.Kilometros || 0,
     observaciones: f.Observaciones || '',
     estado: f.Estado,
@@ -292,10 +294,19 @@ export const api = {
     const id = e.itemId || existente?.id;
     const datos = { ...d, idLocal: e.idLocal, estado: 'Pendiente', comentario: '' };
     if (e.pdf) {
-      const ruta = `${nombreSeguro(d.clienteNombre || d.cliente)}/${carpetaMes(d.fechaRemito)}/${nombrePdf(d, d.clienteNombre || d.cliente)}`;
-      const arch = await subirArchivo(ruta, e.pdf);
+      const carpeta = `${nombreSeguro(d.clienteNombre || d.cliente)}/${carpetaMes(d.fechaRemito)}`;
+      const nombre = nombrePdf(d, d.clienteNombre || d.cliente);
+      const arch = await subirArchivo(`${carpeta}/${nombre}`, e.pdf);
       datos.archivoId = arch.id;
       datos.archivoUrl = arch.webUrl;
+      // Fotos originales con sus ajustes, para poder retocarlas en la revisión
+      if (e.paginas?.length) {
+        datos.paginas = [];
+        for (const [i, p] of e.paginas.entries()) {
+          const foto = await subirArchivo(`${carpeta}/_originales/${nombre.replace(/\.pdf$/, '')} - p${i + 1}.jpg`, p.blob);
+          datos.paginas.push({ archivoId: foto.id, giro: p.giro || 0, recorte: p.recorte || null, mejorar: !!p.mejorar });
+        }
+      }
     }
     const sid = await sitioId();
     const lid = await listaId(CONFIG.listaRemitos);
@@ -321,6 +332,34 @@ export const api = {
   async pdf(remito) {
     if (!remito.archivoId) return null;
     return descargar(await driveId(), remito.archivoId);
+  },
+
+  // ---------- Retoque de fotos en la revisión ----------
+
+  async fotoOriginal(pagina) {
+    return descargar(await driveId(), pagina.archivoId);
+  },
+
+  // Sube una foto nueva agregada en la revisión; devuelve su id
+  async subirFotoOriginal(remito, blob) {
+    const cli = remito.clienteNombre || remito.cliente;
+    const nombre = nombrePdf(remito, cli).replace(/\.pdf$/, '');
+    const foto = await subirArchivo(`${nombreSeguro(cli)}/${carpetaMes(remito.fechaRemito)}/_originales/${nombre} - p${Date.now()}.jpg`, blob);
+    return foto.id;
+  },
+
+  // Reemplaza el PDF del remito por el regenerado (o lo crea si no tenía)
+  async reemplazarPdf(remito, pdf) {
+    const did = await driveId();
+    if (remito.archivoId) {
+      const it = await g(`/drives/${did}/items/${remito.archivoId}/content`, {
+        method: 'PUT', body: pdf, headers: { 'Content-Type': 'application/pdf' },
+      });
+      return { archivoId: it.id, archivoUrl: it.webUrl };
+    }
+    const cli = remito.clienteNombre || remito.cliente;
+    const it = await subirArchivo(`${nombreSeguro(cli)}/${carpetaMes(remito.fechaRemito)}/${nombrePdf(remito, cli)}`, pdf);
+    return { archivoId: it.id, archivoUrl: it.webUrl };
   },
 
   async actualizar(remito) {
