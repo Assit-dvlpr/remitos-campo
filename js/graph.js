@@ -214,6 +214,10 @@ export const api = {
       const items = await todasLasPaginas(`/sites/${sid}/lists/${lid}/items?$expand=fields&$top=500`);
       fila = items.map(i => i.fields).find(f => (f.Title || '').toLowerCase() === email);
     } catch (e) {
+      if (e.status === 403 || e.status === 404) {
+        throw new Error(`Tu cuenta (${email}) no tiene acceso al sitio de SharePoint "${CONFIG.sitio.ruta.split('/').pop()}". ` +
+          'Pedile al propietario del sitio que te agregue como miembro y volvé a entrar.');
+      }
       if (e.codigo !== 'sinConfigurar') throw e;
       return { email, displayName: yo.displayName, nombre: yo.surname || yo.displayName, rol: 'Admin', sinConfigurar: true };
     }

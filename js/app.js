@@ -158,7 +158,12 @@ async function iniciar() {
     estado.usuario = recordar('usuario', await estado.api.usuario());
   } catch (e) {
     estado.usuario = recordar('usuario');
-    if (!estado.usuario) { $('#vista').innerHTML = `<div class="mensaje error">No se pudo identificar al usuario: ${esc(e.message)}</div>`; return; }
+    if (!estado.usuario) {
+      $('#vista').innerHTML = `<div class="mensaje error">No se pudo identificar al usuario: ${esc(e.message)}</div>` +
+        (estado.salir ? '<div class="acciones"><button id="btn-salir-error">Salir / cambiar de cuenta</button></div>' : '');
+      $('#btn-salir-error')?.addEventListener('click', () => estado.salir());
+      return;
+    }
   }
   try {
     estado.clientes = recordar('clientes', await estado.api.leerClientes());
