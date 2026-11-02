@@ -1,6 +1,8 @@
 // Modo demostración: misma API que graph.js, pero guarda en el navegador y simula la planilla.
 // Sirve para probar la interfaz antes de tener el registro en Entra. Los datos son ficticios.
-import { planificarEscritura, filasDeRemito, columnasCliente, norm } from './excel.js';
+import { planificarEscritura, filasDeRemito, columnasCliente } from '../dominio/planilla.js';
+import { norm } from '../nucleo/texto.js';
+import { CODIGOS, ESTADOS, ESTADOS_EN_REVISION, ROLES, errorCon } from '../nucleo/constantes.js';
 
 // La planilla simulada tiene columnas fijas: los campos adicionales que no estén ahí solo se registran
 const columnasDemo = cliente => Object.fromEntries(Object.entries(columnasCliente(cliente))
@@ -60,7 +62,7 @@ export const api = {
   modo: 'demo',
 
   async usuario() {
-    return { email: 'demo@alonger.com.ar', displayName: 'Usuario Demo', nombre: 'Técnico Demo', rol: 'Admin' };
+    return { email: 'demo@alonger.com.ar', displayName: 'Usuario Demo', nombre: 'Técnico Demo', rol: ROLES.ADMIN };
   },
 
   async leerClientes() { return leer().clientes || CLIENTES_DEMO; },
@@ -73,11 +75,11 @@ export const api = {
     const d = leer();
     const existente = d.remitos.find(r => r.remito === e.datos.remito);
     if (existente && existente.idLocal !== e.idLocal && existente.id !== e.itemId) {
-      throw Object.assign(new Error(`El remito ${e.datos.remito} ya fue cargado por ${existente.tecnico}.`), { codigo: 'duplicado' });
+      throw errorCon(`El remito ${e.datos.remito} ya fue cargado por ${existente.tecnico}.`, { codigo: CODIGOS.DUPLICADO });
     }
     const id = e.itemId || existente?.id || String(Date.now());
     const previo = d.remitos.find(r => r.id === id);
-    const nuevo = { ...previo, ...e.datos, id, idLocal: e.idLocal, estado: 'Pendiente', comentario: '', creado: previo?.creado || new Date().toISOString() };
+    const nuevo = { ...previo, ...e.datos, id, idLocal: e.idLocal, estado: ESTADOS.PENDIENTE, comentario: '', creado: previo?.creado || new Date().toISOString() };
     if (e.pdf) { d.pdfs[id] = await blobADataUrl(e.pdf); nuevo.archivoId = id; }
     d.remitos = d.remitos.filter(r => r.id !== id).concat(nuevo);
     guardar(d);
@@ -88,7 +90,7 @@ export const api = {
   },
 
   async pendientes() {
-    return leer().remitos.filter(r => r.estado === 'Pendiente' || r.estado === 'Pendiente Excel')
+    return leer().remitos.filter(r => ESTADOS_EN_REVISION.includes(r.estado))
       .sort((a, b) => a.creado.localeCompare(b.creado));
   },
 
@@ -111,7 +113,7 @@ export const api = {
       encabezados: ENCABEZADOS, cuerpo, direccion: `'Planilla Carga'!A5:S${4 + cuerpo.length}`,
       columnas: columnasDemo(cliente), filas: filasDeRemito(remito, cliente.items),
     });
-    if (plan.error) throw Object.assign(new Error(plan.error), { codigo: plan.duplicado ? 'duplicado' : 'planilla' });
+    if (plan.error) throw errorCon(plan.error, { codigo: plan.duplicado ? CODIGOS.DUPLICADO : CODIGOS.PLANILLA });
     const idx = Object.fromEntries(Object.entries(columnasDemo(cliente)).filter(([, v]) => v)
       .map(([k, v]) => [k, ENCABEZADOS.findIndex(h => norm(h) === norm(v))]));
     const largoInicial = cuerpo.length;

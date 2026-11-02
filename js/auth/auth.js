@@ -1,7 +1,7 @@
 // Login con la cuenta corporativa (Microsoft 365) desde el navegador, sin servidor.
 // MSAL usa el flujo de código con PKCE. La sesión queda guardada en el celular.
 /* global msal */
-import { CONFIG } from './config.js';
+import { CONFIG } from '../nucleo/config.js';
 
 let app = null;
 let cuenta = null;

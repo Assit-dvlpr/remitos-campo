@@ -1,6 +1,6 @@
 # Remitos de Campo — Alonger SRL
 
-**Versión 1.3.0** · Desarrollado por Ignacio Burd
+**Versión 1.4.0** · Desarrollado por Ignacio Burd
 
 App web para que el técnico cargue el remito en campo (servicios y foto del remito firmado) y la oficina solo lo revise.
 Al aprobarlo se escriben las filas en el Excel del cliente. Piloto: **Oldelval**.
@@ -28,7 +28,7 @@ Técnico (celular) → carga ítems + foto → SharePoint (lista + PDF) → Revi
    Si el tenant no deja que los usuarios consientan, tocar **Conceder consentimiento de administrador**.
 5. Copiar **Id. de directorio (inquilino)** y **Id. de aplicación (cliente)**.
 
-### 2. Completar `js/config.js`
+### 2. Completar `js/nucleo/config.js`
 `tenantId`, `clientId` y el sitio de SharePoint (`host` y `ruta`, por ejemplo `alongersrl.sharepoint.com` y `/sites/RemitosCampo`).
 Mientras `clientId` diga `COMPLETAR…`, la app corre en **modo demostración** (datos en el navegador, planilla simulada).
 
@@ -76,21 +76,22 @@ Lo que corrige el revisor tiene prioridad sobre lo que cargó el técnico.
 - Si la tabla se llena, agrega filas al final copiando las fórmulas.
 
 ## Archivos
-| Archivo | Qué hace |
+El código está en capas: cada carpeta solo usa las de arriba en esta tabla, nunca las de abajo.
+
+| Carpeta | Qué hace |
 |---|---|
+| `js/nucleo/` | Configuración (`config.js`: IDs de Entra y sitio), constantes (estados, roles), estado de la sesión, utilidades de texto, fechas e IDs |
+| `js/dominio/` | Reglas de negocio puras, sin pantalla ni red: remito, catálogo del cliente, campos adicionales y `planilla.js` (qué celdas escribir) |
+| `js/datos/` | Fuentes de datos con el mismo contrato (`contrato.js`): `sharepoint/` (Graph: http, sitio, listas, archivos, excel, api) y `demo.js`. `cola.js` guarda en el celular |
+| `js/auth/`, `js/medios/` | Login Microsoft (MSAL, `vendor/msal-browser-4.30.0.min.js`) · foto → recorte/mejora → PDF |
+| `js/ui/` | `dom.js`, `navegacion.js` (pestañas y rutas), `componentes/` y `vistas/` (técnico, revisor, configuración) |
+| `js/app.js` | Arranque |
 | `index.html`, `styles.css` | Interfaz (logo y colores de Alonger) |
-| `js/config.js` | IDs de Entra y sitio de SharePoint |
-| `js/auth.js` | Login Microsoft (MSAL, `vendor/msal-browser-4.30.0.min.js`) |
-| `js/graph.js` | SharePoint y Excel por Microsoft Graph |
-| `js/excel.js` | Cálculo de qué celdas escribir (lógica pura) |
-| `js/demo.js` | Modo demostración |
-| `js/pdf.js`, `js/fotos.js` | Foto → recorte/mejora → PDF |
-| `js/cola.js` | Guardado en el celular y envío al volver la señal |
-| `js/tecnico.js`, `js/revisor.js`, `js/setup.js` | Pantallas |
-| `sw.js`, `manifest.webmanifest` | Instalable y uso sin señal |
+| `sw.js`, `manifest.webmanifest` | Instalable y uso sin señal (`sw.js` lista todos los archivos de `js/`) |
+| `test/` | Pruebas de `js/dominio/`: `npm test` (Node 20 o más) |
 
 ## Actualizar
-Cambiar el código, subir `version` en `js/config.js` y `VERSION` en `sw.js` (así los celulares toman la nueva), y:
+Cambiar el código, correr `npm test`, subir `version` en `js/nucleo/config.js` y `VERSION` en `sw.js` (así los celulares toman la nueva). Un archivo nuevo en `js/` va también en la lista de `sw.js`. Y:
 ```bash
 git commit -am "x.y.z: qué cambió" && git push
 ```

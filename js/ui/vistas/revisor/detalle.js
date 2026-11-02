@@ -1,33 +1,21 @@
-// Pantalla de revisión (oficina): foto del remito al lado de los datos, corregir, aprobar o rechazar.
+// Revisión de un remito (oficina): foto al lado de los datos, corregir, aprobar o rechazar.
 // Lo que corrige el revisor tiene prioridad sobre lo que cargó el técnico.
+import { estado, recordar } from '../../../nucleo/estado.js';
+import { CODIGOS, ESTADOS, QUIEN } from '../../../nucleo/constantes.js';
+import { esc } from '../../../nucleo/texto.js';
+import { completarAutomaticos } from '../../../dominio/extras.js';
+import { buscarEstablecimiento } from '../../../dominio/catalogo.js';
 import {
-  estado, $, esc, fechaCorta, recordar, aviso, ir, claseEstado, normalizarRemito,
-  htmlServicios, conectarServicios,
-} from './app.js';
-import { completarAutomaticos } from './excel.js';
+  normalizarRemito, partesRemito, itemsDeCantidades, cantidadesDeItems, kilometros, faltantesAprobacion,
+} from '../../../dominio/remito.js';
+import { $, aviso } from '../../dom.js';
+import { ir } from '../../navegacion.js';
+import { htmlServicios, conectarServicios } from '../../componentes/servicios.js';
+import { htmlSelectExtra, htmlAutomaticos, leerSelectsExtra } from '../../componentes/extras.js';
 
 let urlPdf = null;
 
-export async function vistaRevision(vista, id) {
-  if (id) return detalle(vista, id);
-  vista.className = 'vista ancha';
-  vista.innerHTML = '<h1 class="titulo">Remitos para revisar</h1><div id="lista"><p class="vacio">Cargando…</p></div>';
-  try {
-    const lista = await estado.api.pendientes();
-    estado.pendientes = lista;
-    $('#lista', vista).innerHTML = lista.length ? `<div class="lista-remitos">${lista.map(r => `
-      <a class="remito-fila boton" href="#revision/${esc(r.id)}" style="justify-content:flex-start">
-        <div class="datos"><div class="nro">${esc(r.remito)} · ${esc(estado.clientes?.[r.cliente]?.nombre || r.cliente)}</div>
-          <div class="sub">${esc(r.establecimiento)} · ${fechaCorta(r.fechaRemito)} · ${esc(r.tecnico)}</div>
-          ${r.estado === 'Pendiente Excel' && r.comentario ? `<div class="sub" style="color:var(--error)">${esc(r.comentario)}</div>` : ''}</div>
-        <span class="estado ${claseEstado(r.estado)}">${esc(r.estado)}</span>
-      </a>`).join('')}</div>` : '<p class="vacio">No hay remitos pendientes. ✔</p>';
-  } catch (e) {
-    $('#lista', vista).innerHTML = `<div class="mensaje error">${esc(e.message)}</div>`;
-  }
-}
-
-async function detalle(vista, id) {
+export async function vistaDetalle(vista, id) {
   vista.className = 'vista ancha';
   let r = (estado.pendientes || []).find(x => x.id === id);
   if (!r) r = (await estado.api.pendientes()).find(x => x.id === id);
@@ -39,15 +27,15 @@ async function detalle(vista, id) {
   r = { ...r };
   if (!r.fechaSolicitud) r.fechaSolicitud = recordar('ultimaFechaSolicitud') || '';
   if (!r.periodo) r.periodo = recordar('ultimoPeriodo') || r.fechaRemito.slice(0, 7);
-  const cant = Object.fromEntries(r.items.map(i => [i.cod, i.cant]));
-  const [pv, numero] = r.remito.split('-');
+  const cant = cantidadesDeItems(r.items);
+  const [pv, numero] = partesRemito(r.remito);
 
   vista.innerHTML = `
     <p><a href="#revision">← Volver a la lista</a></p>
     <div class="revision">
       <div class="visor" id="visor"><p class="vacio">Cargando foto…</p></div>
       <div>
-        ${r.estado === 'Pendiente Excel' ? `<div class="mensaje error"><b>No se pudo pasar al Excel:</b> ${esc(r.comentario)}</div>` : ''}
+        ${r.estado === ESTADOS.PENDIENTE_EXCEL ? `<div class="mensaje error"><b>No se pudo pasar al Excel:</b> ${esc(r.comentario)}</div>` : ''}
         <section class="tarjeta">
           <h2>${esc(cli.nombre)} — remito ${esc(r.remito)}</h2>
           <p class="ayuda" style="margin-top:-8px">Cargado por ${esc(r.tecnico)}${r.creado ? ' el ' + new Date(r.creado).toLocaleString('es-AR') : ''}</p>
@@ -67,12 +55,11 @@ async function detalle(vista, id) {
             ${cli.establecimientos.some(e => e.nombre === r.establecimiento) ? '' : `<option selected>${esc(r.establecimiento)}</option>`}</select>`
             : `<input id="f-estab" value="${esc(r.establecimiento)}">`}
           <p class="ayuda" id="zona">${r.zona ? `Zona <span class="chip">${esc(r.zona)}</span>` : ''}</p>
-          ${(cli.extras || []).filter(d => d.quien !== 'auto').map(d => {
+          ${(cli.extras || []).filter(d => d.quien !== QUIEN.AUTO).map(d => {
             const v = r.extras?.[d.campo] || (d.opciones?.length === 1 ? d.opciones[0] : '');
+            // Si el valor cargado ya no está entre las opciones, se muestra igual para no perderlo
             const ops = (d.opciones || []).includes(v) || !v ? d.opciones || [] : [v, ...(d.opciones || [])];
-            return `<label for="x-${esc(d.campo)}">${esc(d.etiqueta)}${d.quien === 'revisor' ? ' (lo completa la oficina)' : ''}</label>
-              <select id="x-${esc(d.campo)}" data-extra="${esc(d.campo)}"><option value="">Elegir…</option>
-              ${ops.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+            return htmlSelectExtra(d, v, ops, d.quien === QUIEN.REVISOR ? ' (lo completa la oficina)' : '');
           }).join('')}
           <p class="ayuda" id="autos"></p>
         </section>
@@ -100,19 +87,14 @@ async function detalle(vista, id) {
 
   conectarServicios($('#servicios', vista), cant);
   $('#f-estab', vista).addEventListener('input', e => {
-    const est = (cli.establecimientos || []).find(x => x.nombre === e.target.value);
+    const est = buscarEstablecimiento(cli, e.target.value);
     r.zona = est?.zona || r.zona;
     $('#zona', vista).innerHTML = r.zona ? `Zona <span class="chip">${esc(r.zona)}</span>` : '';
   });
 
   // Campos adicionales: lo elegido en pantalla más lo que se calcula de eso (ej. centro de costo según línea)
-  const leerExtras = () => completarAutomaticos(cli.extras, Object.fromEntries(
-    [...vista.querySelectorAll('[data-extra]')].map(s => [s.dataset.extra, s.value])));
-  const pintarAutos = () => {
-    const v = leerExtras();
-    $('#autos', vista).innerHTML = (cli.extras || []).filter(d => d.quien === 'auto' && v[d.campo] !== '')
-      .map(d => `${esc(d.etiqueta)} <span class="chip">${esc(v[d.campo])}</span>`).join(' ');
-  };
+  const leerExtras = () => completarAutomaticos(cli.extras, leerSelectsExtra(vista));
+  const pintarAutos = () => { $('#autos', vista).innerHTML = htmlAutomaticos(cli.extras, leerExtras()); };
   vista.querySelectorAll('[data-extra]').forEach(s => s.addEventListener('input', pintarAutos));
   pintarAutos();
 
@@ -135,8 +117,8 @@ async function detalle(vista, id) {
       fechaSolicitud: $('#f-solicitud', vista).value,
       periodo: $('#f-periodo', vista).value,
       establecimiento: $('#f-estab', vista).value,
-      items: cli.items.filter(it => +cant[it.cod] > 0).map(it => ({ cod: it.cod, servicio: it.servicio, cant: +cant[it.cod] })),
-      km: +(cant[cli.items.find(it => it.unidad === 'km')?.cod ?? 'KM'] || 0),
+      items: itemsDeCantidades(cli.items, cant),
+      km: kilometros(cli.items, cant),
       extras: leerExtras(),
       revisor: estado.usuario.displayName,
     };
@@ -157,7 +139,7 @@ async function detalle(vista, id) {
     if (!comentario) { msg('Escribí el motivo del rechazo para el técnico.', 'error'); return; }
     ocupado(true);
     try {
-      await estado.api.actualizar({ ...leer(), estado: 'Rechazado', comentario, fechaRevision: new Date().toISOString() });
+      await estado.api.actualizar({ ...leer(), estado: ESTADOS.RECHAZADO, comentario, fechaRevision: new Date().toISOString() });
       aviso('Remito rechazado. El técnico lo ve en "Mis remitos".', 'ok');
       ir('revision');
     } catch (e) { msg(esc(e.message), 'error'); ocupado(false); }
@@ -165,16 +147,7 @@ async function detalle(vista, id) {
 
   $('#btn-aprobar', vista).onclick = async () => {
     const d = leer();
-    const faltan = [];
-    if (!d.remito) faltan.push('número de remito');
-    if (!d.fechaRemito) faltan.push('fecha del remito');
-    if (!d.fechaSolicitud) faltan.push('fecha de solicitud');
-    if (!d.periodo) faltan.push('período');
-    if (!d.tecnico) faltan.push('responsable');
-    for (const x of (cli.extras || []).filter(x => x.quien !== 'auto' && x.obligatorio)) {
-      if (!d.extras[x.campo]) faltan.push(x.etiqueta.toLowerCase());
-    }
-    if (!d.items.some(i => cli.items.find(c => String(c.cod) === String(i.cod))?.planilla !== false)) faltan.push('al menos un servicio');
+    const faltan = faltantesAprobacion(d, cli);
     if (faltan.length) { msg('Falta: ' + faltan.join(', ') + '.', 'error'); return; }
     if (!cli.excel?.itemId && estado.api.modo !== 'demo') { msg('Este cliente no tiene Excel vinculado (Configuración).', 'error'); return; }
 
@@ -185,7 +158,7 @@ async function detalle(vista, id) {
     const revision = { ...d, fechaRevision: new Date().toISOString() };
     try {
       // Primero se guardan las correcciones; si el Excel falla, queda "Pendiente Excel" para reintentar
-      await estado.api.actualizar({ ...revision, estado: 'Pendiente Excel', comentario: 'Pasando al Excel…' });
+      await estado.api.actualizar({ ...revision, estado: ESTADOS.PENDIENTE_EXCEL, comentario: 'Pasando al Excel…' });
       const filas = await estado.api.escribirExcel(cli, revision);
       // El PDF va a la carpeta del cliente; si falla, el remito igual queda aprobado (el Excel ya se escribió)
       let archivoUrl = revision.archivoUrl, comentario = '';
@@ -194,19 +167,19 @@ async function detalle(vista, id) {
       } catch (err) {
         comentario = 'Aprobado, pero el PDF no se pudo copiar a la carpeta del cliente: ' + err.message;
       }
-      await estado.api.actualizar({ ...revision, estado: 'Aprobado', comentario, filasExcel: filas, archivoUrl });
+      await estado.api.actualizar({ ...revision, estado: ESTADOS.APROBADO, comentario, filasExcel: filas, archivoUrl });
       if (comentario) aviso(comentario, 'error');
       aviso(`Aprobado. Filas ${filas} de la planilla${comentario ? '' : ' y PDF guardado junto al Excel'}.`, 'ok');
       ir('revision');
     } catch (e) {
       console.error(e);
-      await estado.api.actualizar({ ...revision, estado: 'Pendiente Excel', comentario: e.message }).catch(() => {});
+      await estado.api.actualizar({ ...revision, estado: ESTADOS.PENDIENTE_EXCEL, comentario: e.message }).catch(() => {});
       msg(`<b>No se pasó al Excel:</b> ${esc(e.message)}` +
-        (e.codigo === 'duplicado' ? '<div class="acciones"><button id="btn-ya-esta">Ya está en la planilla: marcar aprobado</button></div>' : ''), 'error');
+        (e.codigo === CODIGOS.DUPLICADO ? '<div class="acciones"><button id="btn-ya-esta">Ya está en la planilla: marcar aprobado</button></div>' : ''), 'error');
       ocupado(false);
       $('#btn-ya-esta', vista)?.addEventListener('click', async () => {
         const archivoUrl = await estado.api.archivarPdf(cli, revision).catch(() => revision.archivoUrl);
-        await estado.api.actualizar({ ...revision, estado: 'Aprobado', comentario: 'Ya estaba en la planilla (no se escribió).', archivoUrl });
+        await estado.api.actualizar({ ...revision, estado: ESTADOS.APROBADO, comentario: 'Ya estaba en la planilla (no se escribió).', archivoUrl });
         aviso('Marcado como aprobado.', 'ok');
         ir('revision');
       });

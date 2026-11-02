@@ -1,5 +1,5 @@
 // Editor de una foto del remito: girar, recortar (arrastrando las esquinas) y mejorar contraste.
-import { $ } from './app.js';
+import { $ } from '../ui/dom.js';
 import { dibujarPagina } from './pdf.js';
 
 // Devuelve la página editada, null si se eliminó, o la original si se cancela.

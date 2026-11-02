@@ -1,0 +1,9 @@
+{
+  "name": "remitos-campo",
+  "private": true,
+  "type": "module",
+  "description": "App web estática (GitHub Pages). package.json solo para correr las pruebas: npm test",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

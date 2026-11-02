@@ -1,18 +1,24 @@
-// Pantallas del técnico: cargar un remito (con foto) y ver el estado de los suyos.
+// Pantalla del técnico: cargar un remito nuevo (con foto) o corregir uno rechazado.
+import { estado, recordar } from '../../../nucleo/estado.js';
+import { QUIEN } from '../../../nucleo/constantes.js';
+import { esc } from '../../../nucleo/texto.js';
+import { hoy } from '../../../nucleo/fechas.js';
+import { uid } from '../../../nucleo/ids.js';
+import { cola, borrador, procesarCola } from '../../../datos/cola.js';
+import { prepararFoto, armarPdf } from '../../../medios/pdf.js';
+import { editarFoto, miniatura } from '../../../medios/fotos.js';
+import { completarAutomaticos } from '../../../dominio/extras.js';
+import { buscarEstablecimiento } from '../../../dominio/catalogo.js';
 import {
-  estado, $, esc, hoy, fechaCorta, uid, recordar, aviso, ir, claseEstado, normalizarRemito,
-  htmlServicios, conectarServicios, nombreServicio, refrescarPestanas,
-} from './app.js';
-import { cola, borrador, procesarCola } from './cola.js';
-import { prepararFoto, armarPdf } from './pdf.js';
-import { editarFoto, miniatura } from './fotos.js';
-import { completarAutomaticos } from './excel.js';
+  normalizarRemito, nombreTecnico as nombreEnPlanilla, responsable, itemsDeCantidades, kilometros, validarCarga,
+} from '../../../dominio/remito.js';
+import { $, aviso } from '../../dom.js';
+import { ir, refrescarPestanas } from '../../navegacion.js';
+import { htmlServicios, conectarServicios } from '../../componentes/servicios.js';
+import { htmlSelectExtra, htmlAutomaticos } from '../../componentes/extras.js';
+import { vistaMisRemitos } from './mis-remitos.js';
 
-// Cómo figura el técnico en la planilla de ese cliente: apellido (Valverdi) o nombre completo (Nicolas Valverdi)
-const nombreTecnico = cli => (cli?.responsable === 'completo' ? estado.usuario.displayName : estado.usuario.nombre);
-const apellidoDe = s => String(s || '').trim().split(/\s+/).pop();
-// Si fueron dos: "Valverdi - Caro"
-const responsable = b => (b.acompanante?.trim() ? `${apellidoDe(b.tecnico)} - ${b.acompanante.trim()}` : b.tecnico.trim());
+const nombreTecnico = cli => nombreEnPlanilla(cli, estado.usuario);
 
 function nuevoBorrador() {
   const claves = Object.keys(estado.clientes || {});
@@ -51,10 +57,10 @@ export async function vistaNuevo(vista) {
 
   function pintar() {
     const cli = estado.clientes[b.cliente];
-    const est = (cli.establecimientos || []).find(e => e.nombre === b.establecimiento);
+    const est = buscarEstablecimiento(cli, b.establecimiento);
     const claves = Object.keys(estado.clientes);
     b.extras = b.extras || {};
-    const extrasTecnico = (cli.extras || []).filter(d => d.quien === 'tecnico');
+    const extrasTecnico = (cli.extras || []).filter(d => d.quien === QUIEN.TECNICO);
     // Un campo con una sola opción viene elegido
     for (const d of extrasTecnico) if (!b.extras[d.campo] && d.opciones?.length === 1) b.extras[d.campo] = d.opciones[0];
     const autos = completarAutomaticos(cli.extras, b.extras);
@@ -78,14 +84,8 @@ export async function vistaNuevo(vista) {
         </div>
         <label for="f-acomp">Acompañante (opcional, apellido)</label>
         <input id="f-acomp" value="${esc(b.acompanante || '')}" placeholder="Si fueron dos técnicos">
-        ${extrasTecnico.map(d => `
-          <label for="x-${esc(d.campo)}">${esc(d.etiqueta)}${d.obligatorio ? '' : ' (opcional)'}</label>
-          <select id="x-${esc(d.campo)}" data-extra="${esc(d.campo)}">
-            <option value="">Elegir…</option>
-            ${(d.opciones || []).map(o => `<option ${o === b.extras[d.campo] ? 'selected' : ''}>${esc(o)}</option>`).join('')}
-          </select>`).join('')}
-        <p class="ayuda" id="autos">${(cli.extras || []).filter(d => d.quien === 'auto' && autos[d.campo] !== '')
-          .map(d => `${esc(d.etiqueta)} <span class="chip">${esc(autos[d.campo])}</span>`).join(' ')}</p>
+        ${extrasTecnico.map(d => htmlSelectExtra(d, b.extras[d.campo], d.opciones || [], d.obligatorio ? '' : ' (opcional)')).join('')}
+        <p class="ayuda" id="autos">${htmlAutomaticos(cli.extras, autos)}</p>
         <label for="f-estab">Establecimiento</label>
         ${cli.establecimientos?.length ? `<select id="f-estab">
           <option value="">Elegir…</option>
@@ -167,8 +167,7 @@ export async function vistaNuevo(vista) {
       b.extras[sel.dataset.extra] = sel.value;
       const cli = estado.clientes[b.cliente];
       const autos = completarAutomaticos(cli.extras, b.extras);
-      $('#autos', vista).innerHTML = (cli.extras || []).filter(d => d.quien === 'auto' && autos[d.campo] !== '')
-        .map(d => `${esc(d.etiqueta)} <span class="chip">${esc(autos[d.campo])}</span>`).join(' ');
+      $('#autos', vista).innerHTML = htmlAutomaticos(cli.extras, autos);
       guardarBorrador();
     }));
     on('#f-pv', 'input', e => { b.pv = e.target.value; guardarBorrador(); });
@@ -178,7 +177,7 @@ export async function vistaNuevo(vista) {
     on('#f-obs', 'input', e => { b.observaciones = e.target.value; guardarBorrador(); });
     on('#f-estab', 'input', e => {
       b.establecimiento = e.target.value;
-      const est = (estado.clientes[b.cliente].establecimientos || []).find(x => x.nombre === b.establecimiento);
+      const est = buscarEstablecimiento(estado.clientes[b.cliente], b.establecimiento);
       $('#zona', vista).innerHTML = est ? `Zona <span class="chip">${esc(est.zona)}</span>` : '';
       guardarBorrador();
     });
@@ -188,27 +187,19 @@ export async function vistaNuevo(vista) {
     on('#btn-enviar', 'click', enviar);
     on('#btn-descartar', 'click', async () => {
       if (!confirm('¿Descartar este remito? Se borra lo cargado.')) return;
+      clearTimeout(tGuardar);
       await borrador.borrar();
       b = nuevoBorrador();
       pintar();
     });
   }
 
-  function validar() {
-    const cli = estado.clientes[b.cliente];
-    const err = [];
-    if (!normalizarRemito(b.pv, b.numero)) err.push('Falta el número de remito.');
-    if (!b.fechaRemito) err.push('Falta la fecha.');
-    else if (b.fechaRemito > hoy()) err.push('La fecha no puede ser futura.');
-    if (!b.establecimiento) err.push('Elegí el establecimiento.');
-    if (!b.tecnico.trim()) err.push('Falta el nombre del técnico.');
-    if (!cli.items.some(it => it.planilla !== false && +b.cant[it.cod] > 0)) err.push('Cargá al menos un servicio.');
-    for (const d of (cli.extras || []).filter(x => x.quien === 'tecnico' && x.obligatorio)) {
-      if (!b.extras?.[d.campo]) err.push(`Elegí ${d.etiqueta.toLowerCase()}.`);
-    }
-    if (!b.paginas.length && !b.archivoPrevio) err.push('Falta la foto del remito firmado.');
-    return err;
-  }
+  // Ítems cargados según el catálogo del cliente
+  const itemsCargados = () => itemsDeCantidades(estado.clientes[b.cliente].items, b.cant);
+
+  const validar = () => validarCarga(b, estado.clientes[b.cliente], {
+    hoy: hoy(), remito: normalizarRemito(b.pv, b.numero), items: itemsCargados(),
+  });
 
   async function enviar() {
     const err = validar();
@@ -233,14 +224,10 @@ export async function vistaNuevo(vista) {
           return;
         }
       }
-      const est = (cli.establecimientos || []).find(e => e.nombre === b.establecimiento);
-      const items = cli.items
-        .filter(it => +b.cant[it.cod] > 0)
-        .map(it => ({ cod: it.cod, servicio: it.servicio, cant: +b.cant[it.cod] }));
-      const kmItem = cli.items.find(it => it.unidad === 'km' || String(it.cod).toUpperCase() === 'KM');
+      const est = buscarEstablecimiento(cli, b.establecimiento);
       // Solo lo que carga el técnico y lo que se calcula de eso; lo del revisor se completa en la oficina
       const extras = completarAutomaticos(cli.extras, Object.fromEntries(
-        (cli.extras || []).filter(d => d.quien === 'tecnico').map(d => [d.campo, b.extras?.[d.campo] || ''])));
+        (cli.extras || []).filter(d => d.quien === QUIEN.TECNICO).map(d => [d.campo, b.extras?.[d.campo] || ''])));
       const entrada = {
         idLocal: b.idLocal,
         itemId: b.itemId,
@@ -252,16 +239,19 @@ export async function vistaNuevo(vista) {
           fechaRemito: b.fechaRemito,
           establecimiento: b.establecimiento,
           zona: est?.zona || '',
-          tecnico: responsable(b),
+          tecnico: responsable(b.tecnico, b.acompanante),
           tecnicoEmail: estado.usuario.email,
-          items,
+          items: itemsCargados(),
           extras,
-          km: kmItem ? +b.cant[kmItem.cod] || 0 : 0,
+          km: kilometros(cli.items, b.cant),
           observaciones: b.observaciones.trim(),
         },
         pdf: b.paginas.length ? await armarPdf(b.paginas) : null,
       };
       await cola.guardar(entrada);
+      // Cancelar un guardado del borrador que esté por correr: si no, el remito enviado vuelve como borrador
+      // con el mismo idLocal y el próximo envío lo pisa en lugar de avisar que el número ya existe.
+      clearTimeout(tGuardar);
       await borrador.borrar();
       recordar('ultimoCliente', b.cliente);
       recordar('ultimoPv', b.pv);
@@ -280,75 +270,4 @@ export async function vistaNuevo(vista) {
   }
 
   pintar();
-}
-
-// ---------- Mis remitos ----------
-
-function resumenItems(r) {
-  return (r.items || []).map(i => `${i.cant} ${nombreServicio(i).split(' ').slice(0, 3).join(' ')}`).join(' · ');
-}
-
-export async function vistaMisRemitos(vista) {
-  const enCola = await cola.todos().catch(() => []);
-  vista.innerHTML = `<h1 class="titulo">Mis remitos</h1>
-    <div id="cola"></div>
-    <h2 style="font-size:16px;margin:20px 0 8px">Enviados</h2>
-    <div id="enviados"><p class="vacio">Cargando…</p></div>`;
-
-  $('#cola', vista).innerHTML = enCola.length ? `
-    <div class="mensaje ${enCola.some(e => e.estado === 'duplicado') ? 'error' : 'alerta'}">
-      ${enCola.length} remito(s) en el celular sin enviar. ${navigator.onLine ? '' : 'Sin señal: se envían solos al volver la conexión.'}
-    </div>
-    <div class="lista-remitos">${enCola.map(e => `
-      <div class="remito-fila">
-        <div class="datos"><div class="nro">${esc(e.datos.remito)}</div>
-          <div class="sub">${esc(e.datos.establecimiento)} · ${fechaCorta(e.datos.fechaRemito)}</div>
-          ${e.error ? `<div class="sub" style="color:var(--error)">${esc(e.error)}</div>` : ''}</div>
-        ${e.estado === 'duplicado'
-          ? `<button data-borrar="${esc(e.idLocal)}" class="peligro">Quitar</button>`
-          : '<span class="estado cola">Sin enviar</span>'}
-      </div>`).join('')}</div>
-    <div class="acciones"><button id="btn-reintentar">Enviar ahora</button></div>` : '';
-
-  $('#btn-reintentar', vista)?.addEventListener('click', async () => {
-    await procesarCola(estado.api, refrescarPestanas);
-    vistaMisRemitos(vista);
-  });
-  vista.querySelectorAll('[data-borrar]').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('¿Quitar este remito del celular? No se envía.')) return;
-    await cola.quitar(btn.dataset.borrar);
-    refrescarPestanas();
-    vistaMisRemitos(vista);
-  }));
-
-  const cont = $('#enviados', vista);
-  if (!navigator.onLine) { cont.innerHTML = '<p class="vacio">Sin señal: no se puede consultar el estado.</p>'; return; }
-  try {
-    const lista = await estado.api.misRemitos(estado.usuario.email);
-    if (!lista.length) { cont.innerHTML = '<p class="vacio">Todavía no enviaste remitos.</p>'; return; }
-    cont.innerHTML = `<div class="lista-remitos">${lista.slice(0, 60).map(r => `
-      <div class="remito-fila">
-        <div class="datos"><div class="nro">${esc(r.remito)}</div>
-          <div class="sub">${esc(r.establecimiento)} · ${fechaCorta(r.fechaRemito)}</div>
-          <div class="sub">${esc(resumenItems(r))}</div>
-          ${r.estado === 'Rechazado' && r.comentario ? `<div class="sub" style="color:var(--error)">${esc(r.comentario)}</div>` : ''}</div>
-        ${r.estado === 'Rechazado'
-          ? `<button data-corregir="${esc(r.id)}" class="primario">Corregir</button>`
-          : `<span class="estado ${claseEstado(r.estado)}">${r.estado === 'Pendiente Excel' ? 'En revisión' : r.estado === 'Pendiente' ? 'En revisión' : esc(r.estado)}</span>`}
-      </div>`).join('')}</div>`;
-    cont.querySelectorAll('[data-corregir]').forEach(btn => btn.addEventListener('click', () => {
-      const r = lista.find(x => x.id === btn.dataset.corregir);
-      const [pv, numero] = r.remito.split('-');
-      estado.corregir = {
-        idLocal: r.idLocal || uid(), itemId: r.id, cliente: r.cliente, pv, numero,
-        fechaRemito: r.fechaRemito, establecimiento: r.establecimiento, tecnico: r.tecnico,
-        cant: Object.fromEntries(r.items.map(i => [i.cod, i.cant])),
-        extras: { ...(r.extras || {}) }, acompanante: '', tecnicoEditado: true,
-        observaciones: r.observaciones, paginas: [], archivoPrevio: !!r.archivoId, comentario: r.comentario,
-      };
-      ir('nuevo');
-    }));
-  } catch (e) {
-    cont.innerHTML = `<div class="mensaje error">${esc(e.message)}</div>`;
-  }
 }

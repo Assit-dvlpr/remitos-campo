@@ -1,12 +1,22 @@
 // Guarda la app en el celular para que abra sin señal. Solo archivos propios:
 // el login de Microsoft y SharePoint siempre van por la red.
-const VERSION = 'remitos-campo-1.3.4';
+const VERSION = 'remitos-campo-1.4.0';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'img/logo_alonger.jpg', 'img/alo.jpg',
   'vendor/msal-browser-4.30.0.min.js',
-  'js/app.js', 'js/config.js', 'js/auth.js', 'js/graph.js', 'js/demo.js', 'js/excel.js',
-  'js/pdf.js', 'js/cola.js', 'js/fotos.js', 'js/tecnico.js', 'js/revisor.js', 'js/setup.js',
+  'js/app.js',
+  'js/nucleo/config.js', 'js/nucleo/constantes.js', 'js/nucleo/estado.js', 'js/nucleo/fechas.js', 'js/nucleo/ids.js', 'js/nucleo/texto.js',
+  'js/dominio/catalogo.js', 'js/dominio/extras.js', 'js/dominio/planilla.js', 'js/dominio/remito.js',
+  'js/datos/contrato.js', 'js/datos/cola.js', 'js/datos/demo.js',
+  'js/datos/sharepoint/api.js', 'js/datos/sharepoint/http.js', 'js/datos/sharepoint/sitio.js',
+  'js/datos/sharepoint/listas.js', 'js/datos/sharepoint/archivos.js', 'js/datos/sharepoint/excel.js',
+  'js/auth/auth.js', 'js/medios/fotos.js', 'js/medios/pdf.js',
+  'js/ui/dom.js', 'js/ui/navegacion.js',
+  'js/ui/componentes/servicios.js', 'js/ui/componentes/extras.js', 'js/ui/componentes/estado-remito.js',
+  'js/ui/vistas/tecnico/nuevo.js', 'js/ui/vistas/tecnico/mis-remitos.js',
+  'js/ui/vistas/revisor/lista.js', 'js/ui/vistas/revisor/detalle.js',
+  'js/ui/vistas/config/configuracion.js', 'js/ui/vistas/config/clientes.js',
 ];
 
 self.addEventListener('install', e => {

@@ -1,117 +1,27 @@
-// Configuración inicial (administrador): estructura en SharePoint, usuarios y clientes con su Excel.
-import { CONFIG } from './config.js';
-import { estado, $, $$, esc, aviso, recordar } from './app.js';
-import { tablasDeExtras, resolverExtras } from './excel.js';
+// Configuración, sección 3: alta y edición de un cliente, vínculo con su Excel y lectura del catálogo.
+import { QUIEN, ETIQUETA_QUIEN } from '../../../nucleo/constantes.js';
+import { estado, recordar } from '../../../nucleo/estado.js';
+import { esc } from '../../../nucleo/texto.js';
+import { claveDe, claveLibre } from '../../../nucleo/ids.js';
+import { tablasDeExtras, resolverExtras } from '../../../dominio/extras.js';
+import {
+  CLIENTE_POR_DEFECTO, ETIQUETAS_COLUMNAS, COLUMNAS_OBLIGATORIAS, prepararItems,
+} from '../../../dominio/catalogo.js';
+import { $, $$, aviso } from '../../dom.js';
 
-// Valores por defecto tomados de la planilla de Oldelval (se pueden cambiar en pantalla).
-// Un cliente nuevo arranca con los mismos encabezados, que se ajustan a su planilla.
-const POR_DEFECTO = {
-  nombre: '',
-  tabla: 'Tabla1',
-  tablaTarifas: 'Tabla17456',
-  hojaEstab: 'Control Campaña',
-  rangoEstab: 'B9:C33',
-  columnas: {
-    fechaSolicitud: 'FECHA SOLICITUD',
-    remito: 'REMITO',
-    fechaRemito: 'FECHA REMITO INFORME',
-    item: 'ITEM',
-    cant: 'CANT',
-    establecimiento: 'ESTABLECIMIENTO',
-    periodo: 'PERIODO',
-    zona: 'ZONA',
-    responsable: 'RESPONSABLE TECNICO VISITA',
-  },
-};
-
-const ETIQUETAS = {
-  fechaSolicitud: 'Fecha de solicitud', remito: 'N° de remito', fechaRemito: 'Fecha del remito', item: 'Ítem',
-  cant: 'Cantidad', establecimiento: 'Establecimiento', periodo: 'Período', zona: 'Zona', responsable: 'Responsable técnico',
-};
-// Sin estas columnas no se puede escribir un remito; las demás son opcionales
-const OBLIGATORIAS = ['remito', 'item', 'cant'];
-
-// "Pan American Energy" -> "pan-american-energy"
-const claveDe = nombre => nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'cliente';
-
-export async function vistaConfiguracion(vista) {
-  const clientes = { ...(estado.clientes || {}) };
-
-  vista.innerHTML = `
-    <h1 class="titulo">Configuración</h1>
-    ${estado.api.modo === 'demo' ? '<div class="mensaje alerta">Modo demostración: esta pantalla no cambia nada en SharePoint.</div>' : ''}
-    ${estado.errorClientes ? `<div class="mensaje alerta">${esc(estado.errorClientes)}</div>` : ''}
-
-    <section class="tarjeta">
-      <h2>1. Listas y biblioteca en SharePoint</h2>
-      <p class="ayuda" style="margin-top:0">Sitio: <b>${esc(CONFIG.sitio.host + CONFIG.sitio.ruta)}</b>. Crea "${esc(CONFIG.listaRemitos)}",
-        "${esc(CONFIG.listaUsuarios)}" y la biblioteca "${esc(CONFIG.biblioteca)}" si no existen. No borra nada.</p>
-      <button id="btn-estructura" class="primario">Crear o verificar</button>
-      <div id="log-estructura" class="ayuda"></div>
-    </section>
-
-    <section class="tarjeta">
-      <h2>2. Usuarios</h2>
-      <p class="ayuda" style="margin-top:0">Quien no esté en la lista entra como técnico con su apellido.
-        "Nombre en planilla" es como figura en la columna Responsable (ej. Mendoza, Valverdi).</p>
-      <div class="dos-col">
-        <div><label for="u-email">Email</label><input id="u-email" type="email" placeholder="nombre@alonger.com.ar"></div>
-        <div><label for="u-nombre">Nombre en planilla</label><input id="u-nombre"></div>
-      </div>
-      <label for="u-rol">Rol</label>
-      <select id="u-rol"><option>Tecnico</option><option>Revisor</option><option>Admin</option></select>
-      <div class="acciones"><button id="btn-usuario">Agregar usuario</button><a id="lnk-usuarios" class="boton" target="_blank" rel="noopener" hidden>Abrir lista en SharePoint</a></div>
-    </section>
-
-    <section class="tarjeta" id="sec-cliente"></section>`;
-
-  const log = t => { $('#log-estructura', vista).innerHTML += esc(t) + '<br>'; };
-
-  estado.api.urlLista(CONFIG.listaUsuarios).then(u => { if (u) { const a = $('#lnk-usuarios', vista); a.href = u; a.hidden = false; } }).catch(() => {});
-
-  $('#btn-estructura', vista).onclick = async e => {
-    e.target.disabled = true;
-    try {
-      await estado.api.crearEstructura(log);
-      // Quien arma la estructura queda como primer administrador
-      if (estado.usuario.sinConfigurar) {
-        await estado.api.agregarUsuario(estado.usuario.email, estado.usuario.nombre, 'Admin');
-        estado.usuario.sinConfigurar = false;
-        log(`${estado.usuario.email} agregado como Admin.`);
-      }
-      log('Listo.');
-    }
-    catch (err) {
-      log('Error: ' + err.message);
-      if (err.status === 403) log('Crear listas necesita el permiso Sites.Manage.All aprobado por un administrador, y ser propietario del sitio.');
-    }
-    finally { e.target.disabled = false; }
-  };
-
-  $('#btn-usuario', vista).onclick = async () => {
-    const email = $('#u-email', vista).value.trim();
-    const nombre = $('#u-nombre', vista).value.trim();
-    if (!/^\S+@\S+$/.test(email) || !nombre) { aviso('Completá email y nombre.', 'error'); return; }
-    try {
-      await estado.api.agregarUsuario(email, nombre, $('#u-rol', vista).value);
-      aviso('Usuario agregado.', 'ok');
-      $('#u-email', vista).value = ''; $('#u-nombre', vista).value = '';
-    } catch (err) { aviso(err.message, 'error'); }
-  };
-
+// Sección 3 de Configuración: un cliente y su Excel. clientes se actualiza en el lugar al guardar o quitar.
+export function seccionClientes(sec, clientes) {
   pintarCliente(Object.keys(clientes)[0] || '');
 
-  // ---------- 3. Un cliente y su Excel (clave '' = cliente nuevo) ----------
+  // clave '' = cliente nuevo
   function pintarCliente(clave) {
-    const sec = $('#sec-cliente', vista);
     const actual = clientes[clave] || {};
     const c = {
-      ...POR_DEFECTO,
+      ...CLIENTE_POR_DEFECTO,
       nombre: actual.nombre || '',
       ...(actual.lectura || {}),
-      columnas: { ...POR_DEFECTO.columnas, ...(actual.excel?.columnas || {}) },
-      tabla: actual.excel?.tabla || POR_DEFECTO.tabla,
+      columnas: { ...CLIENTE_POR_DEFECTO.columnas, ...(actual.excel?.columnas || {}) },
+      tabla: actual.excel?.tabla || CLIENTE_POR_DEFECTO.tabla,
     };
     let excel = actual.excel?.itemId ? actual.excel : null;
     let catalogo = actual.items ? { items: actual.items, establecimientos: actual.establecimientos || [] } : null;
@@ -120,7 +30,7 @@ export async function vistaConfiguracion(vista) {
         <div><label>Nombre</label><input data-k="etiqueta" value="${esc(d.etiqueta || '')}" placeholder="Línea"></div>
         <div><label>Columna en la planilla</label><input data-k="columna" value="${esc(d.columna || '')}" placeholder="LÍNEA"></div>
         <div><label>Lo completa</label><select data-k="quien">
-          ${[['tecnico', 'Técnico'], ['revisor', 'Revisor'], ['auto', 'Automático']].map(([v, t]) => `<option value="${v}" ${d.quien === v ? 'selected' : ''}>${t}</option>`).join('')}
+          ${Object.entries(ETIQUETA_QUIEN).map(([v, t]) => `<option value="${v}" ${d.quien === v ? 'selected' : ''}>${t}</option>`).join('')}
         </select></div>
         <div><label>Opciones</label><input data-k="origen" value="${esc(d.origen || '')}" placeholder="Tabla3[LINEA] o Coordinación, HSE"></div>
         <div><label><input type="checkbox" data-k="obligatorio" ${d.obligatorio ? 'checked' : ''} style="width:auto;min-height:0"> Obligatorio</label></div>
@@ -149,7 +59,7 @@ export async function vistaConfiguracion(vista) {
       <p class="ayuda">Sin hoja de establecimientos, el técnico escribe el lugar a mano.</p>
       <details style="margin-top:12px"><summary>Columnas de la planilla (encabezados)</summary>
         <p class="ayuda">Tal cual el encabezado en la planilla. Dejá vacía la que no exista; N° de remito, Ítem y Cantidad son obligatorias.</p>
-        ${Object.keys(POR_DEFECTO.columnas).map(k => `<label for="col-${k}">${ETIQUETAS[k]}${OBLIGATORIAS.includes(k) ? ' *' : ''}</label><input id="col-${k}" value="${esc(c.columnas[k])}">`).join('')}
+        ${Object.keys(CLIENTE_POR_DEFECTO.columnas).map(k => `<label for="col-${k}">${ETIQUETAS_COLUMNAS[k]}${COLUMNAS_OBLIGATORIAS.includes(k) ? ' *' : ''}</label><input id="col-${k}" value="${esc(c.columnas[k])}">`).join('')}
       </details>
       <label for="c-resp">Responsable en la planilla</label>
       <select id="c-resp">
@@ -180,8 +90,8 @@ export async function vistaConfiguracion(vista) {
         ${catalogo.establecimientos.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Zona</th><th>Establecimiento</th></tr>
         ${catalogo.establecimientos.map(e => `<tr><td>${esc(e.zona)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}</table></div>` : ''}
         ${extras.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Campo</th><th>Columna</th><th>Lo completa</th><th>Valores</th></tr>
-        ${extras.map(d => `<tr><td>${esc(d.etiqueta)}</td><td>${esc(d.columna)}</td><td>${{ tecnico: 'Técnico', revisor: 'Revisor', auto: 'Automático' }[d.quien]}</td>
-          <td>${d.quien === 'auto' ? `${Object.keys(d.mapa || {}).length} valores según ${esc(extras.find(x => x.campo === d.segun)?.etiqueta || '')}` : esc((d.opciones || []).join(', '))}</td></tr>`).join('')}</table></div>` : ''}`;
+        ${extras.map(d => `<tr><td>${esc(d.etiqueta)}</td><td>${esc(d.columna)}</td><td>${ETIQUETA_QUIEN[d.quien]}</td>
+          <td>${d.quien === QUIEN.AUTO ? `${Object.keys(d.mapa || {}).length} valores según ${esc(extras.find(x => x.campo === d.segun)?.etiqueta || '')}` : esc((d.opciones || []).join(', '))}</td></tr>`).join('')}</table></div>` : ''}`;
     };
     pintarCatalogo();
 
@@ -195,7 +105,7 @@ export async function vistaConfiguracion(vista) {
       };
     }).filter(d => d.etiqueta && d.columna);
     $('#btn-extra', sec).onclick = () => {
-      $('#extras', sec).insertAdjacentHTML('beforeend', filaExtra({ quien: 'tecnico' }));
+      $('#extras', sec).insertAdjacentHTML('beforeend', filaExtra({ quien: QUIEN.TECNICO }));
       $('#btn-guardar', sec).disabled = true; // hay que volver a leer el catálogo
     };
     $('#extras', sec).addEventListener('click', e => {
@@ -228,9 +138,7 @@ export async function vistaConfiguracion(vista) {
         if (!catalogo.items.length) throw new Error('No se encontraron ítems en la tabla de tarifas.');
         // Kilómetros: si el cliente los factura como ítem (ej. "KM RECORRIDO"), se usa ese y va a la planilla;
         // si no, se agrega uno propio que solo queda registrado en el remito
-        const itemKm = catalogo.items.find(i => /\bKM\b|KIL[OÓ]METR/i.test(i.servicio));
-        if (itemKm) itemKm.unidad = 'km';
-        else catalogo.items.push({ cod: 'KM', servicio: 'KILÓMETROS', planilla: false, unidad: 'km' });
+        prepararItems(catalogo.items);
         // Campos adicionales: opciones y valores automáticos desde las tablas del Excel
         const defs = leerExtras();
         if (defs.length) {
@@ -252,12 +160,11 @@ export async function vistaConfiguracion(vista) {
     $('#btn-guardar', sec).onclick = async () => {
       const nombre = $('#c-nombre', sec).value.trim();
       if (!nombre) { aviso('Poné el nombre del cliente.', 'error'); return; }
-      const columnas = Object.fromEntries(Object.keys(POR_DEFECTO.columnas).map(k => [k, $('#col-' + k, sec).value.trim()]));
-      const faltan = OBLIGATORIAS.filter(k => !columnas[k]).map(k => ETIQUETAS[k]);
+      const columnas = Object.fromEntries(Object.keys(CLIENTE_POR_DEFECTO.columnas).map(k => [k, $('#col-' + k, sec).value.trim()]));
+      const faltan = COLUMNAS_OBLIGATORIAS.filter(k => !columnas[k]).map(k => ETIQUETAS_COLUMNAS[k]);
       if (faltan.length) { aviso('Faltan columnas obligatorias: ' + faltan.join(', '), 'error'); return; }
       // Un cliente nuevo toma una clave del nombre, sin pisar otro existente
-      let k = clave;
-      if (!k) { k = claveDe(nombre); for (let i = 2; clientes[k]; i++) k = claveDe(nombre) + '-' + i; }
+      const k = clave || claveLibre(nombre, clientes);
       const nuevos = {
         ...clientes,
         [k]: {
