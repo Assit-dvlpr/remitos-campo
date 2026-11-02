@@ -118,7 +118,10 @@ export function planificarEscritura({ encabezados, cuerpo, direccion, columnas, 
         address: `${colLetra(d.col1 + t.desde)}${f1}:${colLetra(d.col1 + t.hasta)}${f2}`,
         values: enRango.map(f => t.campos.map(c => f[c] ?? '')),
       };
-      if (formatoModelo) w.numberFormat = enRango.map(() => t.campos.map(c => formatoModelo[idx[c]] ?? 'General'));
+      // Formato solo para números y fechas; en texto queda el de la celda (null = no tocar)
+      if (formatoModelo) {
+        w.numberFormat = enRango.map(f => t.campos.map(c => (typeof f[c] === 'number' ? formatoModelo[idx[c]] ?? null : null)));
+      }
       escrituras.push(w);
     }
     // Fórmulas faltantes (columnas no mapeadas cuya fila modelo tiene fórmula y la destino está vacía)
