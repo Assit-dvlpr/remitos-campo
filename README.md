@@ -23,7 +23,8 @@ Técnico (celular) → carga ítems + foto → SharePoint (lista + PDF) → Revi
 3. URI de redirección: plataforma **Aplicación de página única (SPA)**:
    - `https://iburd84.github.io/remitos-campo/`
    - `http://localhost:8080/` (para pruebas)
-4. **Permisos de API → Microsoft Graph → Delegados**: `User.Read`, `Sites.ReadWrite.All`, `Files.ReadWrite.All`.
+4. **Permisos de API → Microsoft Graph → Delegados**: `User.Read`, `Sites.ReadWrite.All`, `Files.ReadWrite.All` y
+   `Sites.Manage.All` (este último solo lo pide la pantalla de Configuración para crear las listas).
    Si el tenant no deja que los usuarios consientan, tocar **Conceder consentimiento de administrador**.
 5. Copiar **Id. de directorio (inquilino)** y **Id. de aplicación (cliente)**.
 
