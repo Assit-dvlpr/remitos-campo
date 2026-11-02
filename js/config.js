@@ -3,12 +3,14 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.0.2',
+  version: '1.0.3',
 
   // Microsoft Entra (registro de la app, tipo SPA)
   tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
   clientId: '6accec4b-39ef-40c6-9bd8-f861b007bb38',
   scopes: ['User.Read', 'Sites.ReadWrite.All', 'Files.ReadWrite.All'],
+  // Solo para la pantalla de Configuración: crear listas, columnas y biblioteca
+  scopesConfiguracion: ['Sites.Manage.All'],
 
   // Sitio de SharePoint del piloto, ej. host 'alongersrl.sharepoint.com', ruta '/sites/RemitosCampo'
   sitio: {

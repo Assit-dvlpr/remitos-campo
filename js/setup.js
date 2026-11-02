@@ -116,7 +116,10 @@ export async function vistaConfiguracion(vista) {
       }
       log('Listo.');
     }
-    catch (err) { log('Error: ' + err.message); }
+    catch (err) {
+      log('Error: ' + err.message);
+      if (err.status === 403) log('Crear listas necesita el permiso Sites.Manage.All aprobado por un administrador, y ser propietario del sitio.');
+    }
     finally { e.target.disabled = false; }
   };
 

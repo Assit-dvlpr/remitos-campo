@@ -34,14 +34,14 @@ export function salir() {
   return app.logoutRedirect({ account: cuenta });
 }
 
-export async function obtenerToken() {
+export async function obtenerToken(scopes = CONFIG.scopes) {
   if (!cuenta) throw new Error('No hay sesión iniciada.');
   try {
-    const r = await app.acquireTokenSilent({ scopes: CONFIG.scopes, account: cuenta });
+    const r = await app.acquireTokenSilent({ scopes, account: cuenta });
     return r.accessToken;
   } catch (e) {
     if (e instanceof msal.InteractionRequiredAuthError && navigator.onLine) {
-      await app.acquireTokenRedirect({ scopes: CONFIG.scopes, account: cuenta });
+      await app.acquireTokenRedirect({ scopes, account: cuenta });
     }
     throw e;
   }

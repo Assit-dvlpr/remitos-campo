@@ -6,8 +6,8 @@ import { planificarEscritura, filasDeRemito } from './excel.js';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
-export async function g(ruta, { method = 'GET', body, headers = {}, reintentos = 3 } = {}) {
-  const h = { Authorization: 'Bearer ' + (await obtenerToken()), ...headers };
+export async function g(ruta, { method = 'GET', body, headers = {}, reintentos = 3, scopes } = {}) {
+  const h = { Authorization: 'Bearer ' + (await obtenerToken(scopes)), ...headers };
   let cuerpo = body;
   if (body !== undefined && !(body instanceof Blob)) {
     h['Content-Type'] = 'application/json';
@@ -16,7 +16,7 @@ export async function g(ruta, { method = 'GET', body, headers = {}, reintentos =
   const r = await fetch(ruta.startsWith('http') ? ruta : GRAPH + ruta, { method, headers: h, body: cuerpo });
   if ([429, 503, 504].includes(r.status) && reintentos > 0) {
     await esperar(1000 * (+r.headers.get('Retry-After') || 2));
-    return g(ruta, { method, body, headers, reintentos: reintentos - 1 });
+    return g(ruta, { method, body, headers, reintentos: reintentos - 1, scopes });
   }
   if (!r.ok) {
     let msg = r.statusText, codigo;
@@ -355,7 +355,8 @@ export const api = {
     ];
     for (const def of definiciones) {
       if (await buscarLista(def.displayName)) { alAvanzar?.(`"${def.displayName}" ya existía.`); continue; }
-      await g(`/sites/${sid}/lists`, { method: 'POST', body: def });
+      // Crear listas requiere Sites.Manage.All (Sites.ReadWrite.All solo trabaja dentro de ellas)
+      await g(`/sites/${sid}/lists`, { method: 'POST', body: def, scopes: CONFIG.scopesConfiguracion });
       alAvanzar?.(`Creada "${def.displayName}".`);
     }
     Object.keys(cache).forEach(k => k !== 'sitio' && delete cache[k]);
