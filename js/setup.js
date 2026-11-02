@@ -9,7 +9,7 @@ const POR_DEFECTO = {
   tabla: 'Tabla1',
   tablaTarifas: 'Tabla17456',
   hojaEstab: 'Control Campaña',
-  rangoEstab: 'B9:C60',
+  rangoEstab: 'B9:C33',
   columnas: {
     fechaSolicitud: 'FECHA SOLICITUD',
     remito: 'REMITO',

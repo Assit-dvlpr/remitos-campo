@@ -386,7 +386,9 @@ export const api = {
       const est = await leerRango(excel, hojaEstab, rangoEstab, h);
       return {
         items: tar.slice(1).filter(f => f[0] !== '' && f[1] !== '').map(f => ({ cod: f[0], servicio: String(f[1]).trim(), planilla: true })),
-        establecimientos: est.filter(f => String(f[1]).trim()).map(f => ({ zona: String(f[0]).trim(), nombre: String(f[1]).trim() })),
+        // Se corta en la primera fila vacía: debajo suele haber otra tabla de la misma hoja
+        establecimientos: est.slice(0, (est.findIndex(f => !String(f[1]).trim()) + 1 || est.length + 1) - 1)
+          .map(f => ({ zona: String(f[0]).trim(), nombre: String(f[1]).trim() })),
       };
     });
   },
