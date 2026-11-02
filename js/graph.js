@@ -94,6 +94,12 @@ async function driveId() {
 const rutaArchivo = p => p.split('/').map(encodeURIComponent).join('/');
 const nombreSeguro = s => String(s).replace(/["*:<>?/\\|#%]/g, '-').replace(/\s+/g, ' ').trim();
 
+// Orden de los PDF: <Cliente>/<Año>/<MM - Mes>/Remito <N°> - <Cliente> - <Establecimiento> - <AAAA-MM-DD>.pdf
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const carpetaMes = fecha => { const [y, m] = fecha.split('-'); return `${y}/${m} - ${MESES[+m - 1]}`; };
+const nombrePdf = (r, cliente) =>
+  nombreSeguro(`Remito ${r.remito} - ${cliente} - ${r.establecimiento} - ${r.fechaRemito}`) + '.pdf';
+
 // ---------- Campos de la lista <-> remito ----------
 
 const fechaLista = iso => (iso ? iso + 'T12:00:00Z' : null);
@@ -171,9 +177,11 @@ async function itemsDonde(campo, valor) {
 
 // ---------- Archivos ----------
 
-async function subirArchivo(ruta, blob) {
-  const did = await driveId();
-  const base = `/drives/${did}/root:/${rutaArchivo(ruta)}:`;
+// ruta relativa a la raíz de la biblioteca de trabajo, o a la carpeta `desde` = { drive, carpeta } si se indica
+async function subirArchivo(ruta, blob, desde) {
+  const base = desde
+    ? `/drives/${desde.drive}/items/${desde.carpeta}:/${rutaArchivo(ruta)}:`
+    : `/drives/${await driveId()}/root:/${rutaArchivo(ruta)}:`;
   if (blob.size < 3.5 * 1024 * 1024) {
     return g(`${base}/content?@microsoft.graph.conflictBehavior=replace`, {
       method: 'PUT', body: blob, headers: { 'Content-Type': blob.type || 'application/octet-stream' },
@@ -279,8 +287,7 @@ export const api = {
     const id = e.itemId || existente?.id;
     const datos = { ...d, idLocal: e.idLocal, estado: 'Pendiente', comentario: '' };
     if (e.pdf) {
-      const mes = d.fechaRemito.slice(0, 7);
-      const ruta = `${nombreSeguro(d.clienteNombre || d.cliente)}/${mes}/Remito ${nombreSeguro(d.remito)} - ${nombreSeguro(d.establecimiento)}.pdf`;
+      const ruta = `${nombreSeguro(d.clienteNombre || d.cliente)}/${carpetaMes(d.fechaRemito)}/${nombrePdf(d, d.clienteNombre || d.cliente)}`;
       const arch = await subirArchivo(ruta, e.pdf);
       datos.archivoId = arch.id;
       datos.archivoUrl = arch.webUrl;
@@ -344,6 +351,18 @@ export const api = {
       }
       return `${plan.desde}-${plan.hasta}`;
     });
+  },
+
+  // Copia el PDF aprobado al lado del Excel del cliente, con los datos ya revisados en el nombre.
+  // Devuelve el link del archivo copiado.
+  async archivarPdf(cliente, remito) {
+    if (!remito.archivoId) throw new Error('El remito no tiene foto.');
+    const ex = cliente.excel;
+    const blob = await descargar(await driveId(), remito.archivoId);
+    const padre = (await g(`/drives/${ex.driveId}/items/${ex.itemId}?$select=parentReference`)).parentReference.id;
+    const ruta = `Remitos ${nombreSeguro(cliente.nombre)}/${carpetaMes(remito.fechaRemito)}/${nombrePdf(remito, cliente.nombre)}`;
+    const it = await subirArchivo(ruta, new Blob([blob], { type: 'application/pdf' }), { drive: ex.driveId, carpeta: padre });
+    return it.webUrl;
   },
 
   // ---------- Configuración inicial ----------

@@ -1,6 +1,6 @@
 # Remitos de Campo — Alonger SRL
 
-**Versión 1.0.0** · Desarrollado por Ignacio Burd
+**Versión 1.1.0** · Desarrollado por Ignacio Burd
 
 App web para que el técnico cargue el remito en campo (servicios y foto del remito firmado) y la oficina solo lo revise.
 Al aprobarlo se escriben las filas en el Excel del cliente. Piloto: **Oldelval**.
@@ -59,6 +59,12 @@ ve el motivo y toca **Corregir**.
 **Revisor**: Revisión → abre un remito → foto a la izquierda, datos a la derecha → corrige lo que haga falta,
 completa fecha de solicitud y período → **Aprobar y pasar al Excel** (o **Rechazar** con comentario).
 Lo que corrige el revisor tiene prioridad sobre lo que cargó el técnico.
+
+## Dónde quedan los PDF
+- **Mientras se revisa:** biblioteca *Remitos Escaneados* del sitio, `Oldelval/2026/10 - Octubre/`.
+- **Al aprobar:** se copia **al lado del Excel del cliente**, con los datos ya corregidos por el revisor:
+  `Remitos Oldelval/2026/10 - Octubre/Remito 0001-00005780 - Oldelval - Oleoducto Sierras Blancas - 2026-10-27.pdf`.
+  Si la copia falla, el remito igual queda aprobado y el comentario lo indica.
 
 ## Cómo escribe en el Excel
 - Una fila por servicio, en la primera fila libre de la tabla de carga (`Tabla1` de *Planilla Carga*). Los kilómetros no van.

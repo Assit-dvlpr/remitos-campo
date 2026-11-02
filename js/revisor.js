@@ -162,8 +162,16 @@ async function detalle(vista, id) {
       // Primero se guardan las correcciones; si el Excel falla, queda "Pendiente Excel" para reintentar
       await estado.api.actualizar({ ...revision, estado: 'Pendiente Excel', comentario: 'Pasando al Excel…' });
       const filas = await estado.api.escribirExcel(cli, revision);
-      await estado.api.actualizar({ ...revision, estado: 'Aprobado', comentario: '', filasExcel: filas });
-      aviso(`Aprobado. Filas ${filas} de la planilla.`, 'ok');
+      // El PDF va a la carpeta del cliente; si falla, el remito igual queda aprobado (el Excel ya se escribió)
+      let archivoUrl = revision.archivoUrl, comentario = '';
+      try {
+        archivoUrl = await estado.api.archivarPdf(cli, revision);
+      } catch (err) {
+        comentario = 'Aprobado, pero el PDF no se pudo copiar a la carpeta del cliente: ' + err.message;
+      }
+      await estado.api.actualizar({ ...revision, estado: 'Aprobado', comentario, filasExcel: filas, archivoUrl });
+      if (comentario) aviso(comentario, 'error');
+      aviso(`Aprobado. Filas ${filas} de la planilla${comentario ? '' : ' y PDF guardado junto al Excel'}.`, 'ok');
       ir('revision');
     } catch (e) {
       console.error(e);
@@ -172,7 +180,8 @@ async function detalle(vista, id) {
         (e.codigo === 'duplicado' ? '<div class="acciones"><button id="btn-ya-esta">Ya está en la planilla: marcar aprobado</button></div>' : ''), 'error');
       ocupado(false);
       $('#btn-ya-esta', vista)?.addEventListener('click', async () => {
-        await estado.api.actualizar({ ...revision, estado: 'Aprobado', comentario: 'Ya estaba en la planilla (no se escribió).' });
+        const archivoUrl = await estado.api.archivarPdf(cli, revision).catch(() => revision.archivoUrl);
+        await estado.api.actualizar({ ...revision, estado: 'Aprobado', comentario: 'Ya estaba en la planilla (no se escribió).', archivoUrl });
         aviso('Marcado como aprobado.', 'ok');
         ir('revision');
       });

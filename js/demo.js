@@ -122,6 +122,13 @@ export const api = {
     return `${plan.desde}-${plan.hasta}`;
   },
 
+  async archivarPdf(cliente, remito) {
+    const [y, m] = remito.fechaRemito.split('-');
+    const ruta = `Remitos ${cliente.nombre}/${y}/${m}/Remito ${remito.remito} - ${cliente.nombre} - ${remito.establecimiento} - ${remito.fechaRemito}.pdf`;
+    console.info('[demo] PDF archivado en:', ruta);
+    return ruta;
+  },
+
   tablaDemo() { return { encabezados: ENCABEZADOS, cuerpo: leer().tabla || tablaInicial() }; },
 
   async crearEstructura(alAvanzar) { alAvanzar?.('Modo demo: no se crea nada en SharePoint.'); },
