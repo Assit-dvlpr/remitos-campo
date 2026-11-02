@@ -1,6 +1,6 @@
 # Remitos de Campo — Alonger SRL
 
-**Versión 1.5.0** · Desarrollado por Ignacio Burd
+**Versión 1.6.0** · Desarrollado por Ignacio Burd
 
 App web para que el técnico cargue el remito en campo (servicios y foto del remito firmado) y la oficina solo lo revise.
 Al aprobarlo se escriben las filas en el Excel del cliente. Piloto: **Oldelval**.
@@ -107,6 +107,10 @@ Configuración → 3 → **+ Nuevo cliente**: nombre, vínculo de su Excel (subi
 tabla de ítems (tarifas) y, si tiene, hoja y rango de establecimientos. En "Columnas de la planilla" van los
 encabezados tal cual; los que su planilla no tenga se dejan vacíos (N° de remito, Ítem y Cantidad son obligatorios).
 Sin establecimientos, el técnico escribe el lugar a mano. Con más de un cliente, el técnico elige el cliente al cargar.
+
+**Unidades de negocio:** con "Separar los ítems por unidad de negocio", cada ítem se asigna a Comunes, Mediciones
+laborales o Seguridad eléctrica (se sugiere por el nombre y se corrige en la tabla). El técnico ve arriba los
+**Más usados** (su propio uso en el celular + las últimas 500 filas de la planilla), luego Comunes y un desplegable por unidad.
 
 **Responsable:** apellido (Oldelval: "Valverdi") o nombre completo (Halliburton: "Nicolas Valverdi"). Con acompañante
 queda "Valverdi - Caro".

@@ -1,6 +1,7 @@
 // Arranque, sesión, navegación y utilidades de interfaz compartidas.
 import { CONFIG, MODO_DEMO } from './config.js';
 import { cola, procesarCola } from './cola.js';
+import { masUsados, UNIDADES } from './excel.js';
 
 export const estado = { api: null, usuario: null, clientes: null };
 
@@ -42,28 +43,55 @@ export function normalizarRemito(pv, num) {
 }
 
 // Lista de servicios con botones +/-; cant = { cod: número }
+function filaServicio(it, cant) {
+  const v = +cant[it.cod] || 0;
+  const km = it.unidad === 'km' || String(it.cod).toUpperCase() === 'KM';
+  const detalle = km
+    ? (it.planilla === false ? 'Kilómetros recorridos (no va a la planilla)' : `Ítem ${esc(it.cod)} · kilómetros`)
+    : 'Ítem ' + esc(it.cod);
+  return `<div class="servicio ${v > 0 ? 'marcado' : ''}" data-cod="${esc(it.cod)}">
+    <div class="nombre">${esc(nombreServicio(it))}<small>${detalle}</small></div>
+    <div class="stepper">
+      ${km ? '' : '<button type="button" data-paso="-1" aria-label="Restar">−</button>'}
+      <input type="number" inputmode="numeric" min="0" class="${km ? 'km' : ''}" value="${v || ''}" placeholder="0" aria-label="Cantidad ${esc(it.servicio)}">
+      ${km ? '' : '<button type="button" data-paso="1" aria-label="Sumar">+</button>'}
+    </div></div>`;
+}
+
+const lista = (items, cant) => `<div class="servicios">${items.map(it => filaServicio(it, cant)).join('')}</div>`;
+const desplegable = (titulo, items, cant) => {
+  const abierto = items.some(it => +cant[it.cod] > 0); // si tiene algo cargado, se muestra abierto
+  return `<details class="otros-servicios" ${abierto ? 'open' : ''}><summary>${esc(titulo)} (${items.length})</summary>${lista(items, cant)}</details>`;
+};
+
+// Ítems por unidad de negocio: comunes a la vista; Mediciones laborales y Seguridad eléctrica en desplegables
+function porUnidad(items, cant) {
+  const comunes = items.filter(it => it.negocio === 'comun');
+  return (comunes.length ? `<p class="etiqueta">${UNIDADES.comun}</p>${lista(comunes, cant)}` : '') +
+    ['ml', 'se'].map(k => {
+      const g = items.filter(it => (it.negocio || 'ml') === k);
+      return g.length ? desplegable(UNIDADES[k], g, cant) : '';
+    }).join('');
+}
+
+// Formulario del técnico: "Más usados" arriba; el resto por unidad de negocio o en un desplegable
+export function htmlServiciosTecnico(cli, cant, usoLocal) {
+  const top = masUsados(cli.items, usoLocal);
+  if (!top.length && !cli.separarUnidades) return lista(cli.items, cant);
+  const enTop = new Set(top.map(it => String(it.cod)));
+  const resto = cli.items.filter(it => !enTop.has(String(it.cod)));
+  return (top.length ? `<p class="etiqueta">Más usados</p>${lista(top, cant)}` : '') +
+    (cli.separarUnidades ? porUnidad(resto, cant) : desplegable('Todos los demás servicios', resto, cant));
+}
+
 // separarCargados (revisión): primero lo que cargó el técnico; el resto en un desplegable para sumar otro
-export function htmlServicios(items, cant, { separarCargados = false } = {}) {
-  const fila = it => {
-    const v = +cant[it.cod] || 0;
-    const km = it.unidad === 'km' || String(it.cod).toUpperCase() === 'KM';
-    const detalle = km
-      ? (it.planilla === false ? 'Kilómetros recorridos (no va a la planilla)' : `Ítem ${esc(it.cod)} · kilómetros`)
-      : 'Ítem ' + esc(it.cod);
-    return `<div class="servicio ${v > 0 ? 'marcado' : ''}" data-cod="${esc(it.cod)}">
-      <div class="nombre">${esc(nombreServicio(it))}<small>${detalle}</small></div>
-      <div class="stepper">
-        ${km ? '' : '<button type="button" data-paso="-1" aria-label="Restar">−</button>'}
-        <input type="number" inputmode="numeric" min="0" class="${km ? 'km' : ''}" value="${v || ''}" placeholder="0" aria-label="Cantidad ${esc(it.servicio)}">
-        ${km ? '' : '<button type="button" data-paso="1" aria-label="Sumar">+</button>'}
-      </div></div>`;
-  };
-  if (!separarCargados) return `<div class="servicios">${items.map(fila).join('')}</div>`;
+export function htmlServicios(items, cant, { separarCargados = false, unidades = false } = {}) {
+  if (!separarCargados) return lista(items, cant);
   const cargados = items.filter(it => +cant[it.cod] > 0);
   const resto = items.filter(it => !(+cant[it.cod] > 0));
-  return `<div class="servicios">${cargados.length ? cargados.map(fila).join('') : '<p class="ayuda">El técnico no cargó servicios.</p>'}</div>
+  return `${cargados.length ? lista(cargados, cant) : '<p class="ayuda">El técnico no cargó servicios.</p>'}
     ${resto.length ? `<details class="otros-servicios"><summary>Agregar otro servicio (${resto.length})</summary>
-      <div class="servicios">${resto.map(fila).join('')}</div></details>` : ''}`;
+      ${unidades ? porUnidad(resto, cant) : lista(resto, cant)}</details>` : ''}`;
 }
 
 export function nombreServicio(it) {

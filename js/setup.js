@@ -1,7 +1,7 @@
 // Configuración inicial (administrador): estructura en SharePoint, usuarios y clientes con su Excel.
 import { CONFIG } from './config.js';
 import { estado, $, $$, esc, aviso, recordar } from './app.js';
-import { tablasDeExtras, resolverExtras } from './excel.js';
+import { tablasDeExtras, resolverExtras, UNIDADES, sugerirUnidad } from './excel.js';
 
 // Valores por defecto tomados de la planilla de Oldelval (se pueden cambiar en pantalla).
 // Un cliente nuevo arranca con los mismos encabezados, que se ajustan a su planilla.
@@ -164,6 +164,10 @@ export async function vistaConfiguracion(vista) {
         <div id="extras">${extras.map(filaExtra).join('')}</div>
         <div class="acciones"><button type="button" id="btn-extra">+ Agregar campo</button></div>
       </details>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin-top:12px">
+        <input type="checkbox" id="c-separar" ${actual.separarUnidades ? 'checked' : ''} style="width:auto;min-height:0">
+        Separar los ítems por unidad de negocio (Mediciones laborales / Seguridad eléctrica)</label>
+      <p class="ayuda">Al tildarlo se sugiere la unidad de cada ítem por su nombre; se corrige en la tabla de abajo.</p>
       <div class="acciones"><button id="btn-leer" class="primario">Vincular y leer catálogo</button></div>
       <div id="catalogo"></div>
       <div class="acciones">
@@ -175,8 +179,13 @@ export async function vistaConfiguracion(vista) {
       if (!catalogo) return;
       $('#catalogo', sec).innerHTML = `
         <p class="ayuda"><b>${catalogo.items.length}</b> ítems y <b>${catalogo.establecimientos.length}</b> establecimientos.</p>
-        <div class="tabla-scroll"><table class="tabla"><tr><th>Ítem</th><th>Servicio</th><th>A planilla</th></tr>
-        ${catalogo.items.map(i => `<tr><td>${esc(i.cod)}</td><td>${esc(i.servicio)}</td><td>${i.planilla === false ? 'No' : 'Sí'}</td></tr>`).join('')}</table></div>
+        <div class="tabla-scroll"><table class="tabla"><tr><th>Ítem</th><th>Servicio</th><th>A planilla</th><th>Uso</th>${separar() ? '<th>Unidad</th>' : ''}</tr>
+        ${catalogo.items.map((i, n) => `<tr><td>${esc(i.cod)}</td><td>${esc(i.servicio)}</td><td>${i.planilla === false ? 'No' : 'Sí'}</td>
+          <td>${i.uso || ''}</td>
+          ${separar() ? `<td><select data-unidad="${n}" style="min-height:32px;padding:2px 6px;font-size:14px">
+            ${Object.entries(UNIDADES).map(([k, t]) => `<option value="${k}" ${i.negocio === k ? 'selected' : ''}>${t}</option>`).join('')}
+          </select></td>` : ''}</tr>`).join('')}</table></div>
+        <p class="ayuda">Uso: veces que se cargó en las últimas 500 filas de la planilla. Los más usados quedan a mano para el técnico.</p>
         ${catalogo.establecimientos.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Zona</th><th>Establecimiento</th></tr>
         ${catalogo.establecimientos.map(e => `<tr><td>${esc(e.zona)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}</table></div>` : ''}
         ${extras.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Campo</th><th>Columna</th><th>Lo completa</th><th>Valores</th></tr>
@@ -213,6 +222,15 @@ export async function vistaConfiguracion(vista) {
 
     $('#c-elegir', sec).onchange = e => pintarCliente(e.target.value);
 
+    // Unidades de negocio: al activar, se sugiere la de cada ítem que no tenga una asignada
+    function separar() { return $('#c-separar', sec)?.checked; }
+    const sugerirFaltantes = () => { for (const it of catalogo?.items || []) if (!it.negocio) it.negocio = sugerirUnidad(it.servicio); };
+    $('#c-separar', sec).addEventListener('change', () => { if (separar()) sugerirFaltantes(); pintarCatalogo(); });
+    $('#catalogo', sec).addEventListener('change', e => {
+      const n = e.target.dataset?.unidad;
+      if (n !== undefined && catalogo) catalogo.items[+n].negocio = e.target.value;
+    });
+
     $('#btn-leer', sec).onclick = async e => {
       e.target.disabled = true;
       // Lo leído antes no vale para el Excel nuevo: se limpia hasta que la lectura termine bien
@@ -228,7 +246,15 @@ export async function vistaConfiguracion(vista) {
         if (!catalogo.items.length) throw new Error('No se encontraron ítems en la tabla de tarifas.');
         // Kilómetros: si el cliente los factura como ítem (ej. "KM RECORRIDO"), se usa ese y va a la planilla;
         // si no, se agrega uno propio que solo queda registrado en el remito
-        const itemKm = catalogo.items.find(i => /\bKM\b|KIL[OÓ]METR/i.test(i.servicio));
+        // Lo asignado antes a cada ítem (unidad de negocio) se conserva al volver a leer
+        for (const it of catalogo.items) {
+          const previo = (actual.items || []).find(p => String(p.cod) === String(it.cod));
+          if (previo?.negocio) it.negocio = previo.negocio;
+        }
+        // Uso de cada ítem en la planilla, para "Más usados" (si no se puede leer, se sigue sin eso)
+        const uso = await estado.api.contarItems(excel, $('#c-tabla', sec).value.trim(), $('#col-item', sec).value.trim()).catch(() => ({}));
+        for (const it of catalogo.items) it.uso = uso[it.cod] || 0;
+        const itemKm = catalogo.items.find(i => /^KM\b|KM RECORRIDO|KIL[OÓ]METR/i.test(i.servicio));
         if (itemKm) itemKm.unidad = 'km';
         else catalogo.items.push({ cod: 'KM', servicio: 'KILÓMETROS', planilla: false, unidad: 'km' });
         // Campos adicionales: opciones y valores automáticos desde las tablas del Excel
@@ -240,6 +266,7 @@ export async function vistaConfiguracion(vista) {
           if (r.error) throw new Error(r.error);
           extras = r.extras;
         } else extras = [];
+        if (separar()) sugerirFaltantes();
         pintarCatalogo();
         $('#btn-guardar', sec).disabled = false;
       } catch (err) {
@@ -268,6 +295,7 @@ export async function vistaConfiguracion(vista) {
           excel: { ...(excel || {}), tabla: $('#c-tabla', sec).value.trim(), columnas },
           extras,
           responsable: $('#c-resp', sec).value,
+          separarUnidades: !!separar(),
         },
       };
       try {

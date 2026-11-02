@@ -90,7 +90,7 @@ async function detalle(vista, id) {
         <section class="tarjeta">
           <h2>Servicios</h2>
           <p class="ayuda" style="margin:-4px 0 8px">Resaltado: lo que cargó el técnico.</p>
-          <div id="servicios">${htmlServicios(cli.items, cant, { separarCargados: true })}</div>
+          <div id="servicios">${htmlServicios(cli.items, cant, { separarCargados: true, unidades: !!cli.separarUnidades })}</div>
           ${r.observaciones ? `<label>Observaciones del técnico</label><p style="margin:0">${esc(r.observaciones)}</p>` : ''}
         </section>
         <section class="tarjeta">

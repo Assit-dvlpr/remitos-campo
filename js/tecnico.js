@@ -1,7 +1,7 @@
 // Pantallas del técnico: cargar un remito (con foto) y ver el estado de los suyos.
 import {
   estado, $, esc, hoy, fechaCorta, uid, recordar, aviso, ir, claseEstado, normalizarRemito,
-  htmlServicios, conectarServicios, nombreServicio, refrescarPestanas,
+  htmlServiciosTecnico, conectarServicios, nombreServicio, refrescarPestanas,
 } from './app.js';
 import { cola, borrador, procesarCola } from './cola.js';
 import { prepararFoto, armarPdf } from './pdf.js';
@@ -97,7 +97,7 @@ export async function vistaNuevo(vista) {
       <section class="tarjeta">
         <h2>Servicios realizados</h2>
         <p class="ayuda" style="margin:0 0 8px">Cargá lo mismo que escribiste en el remito.</p>
-        <div id="servicios">${htmlServicios(cli.items, b.cant)}</div>
+        <div id="servicios">${htmlServiciosTecnico(cli, b.cant, recordar('uso-' + b.cliente) || {})}</div>
         <label for="f-obs">Observaciones (opcional)</label>
         <textarea id="f-obs" rows="2">${esc(b.observaciones)}</textarea>
       </section>
@@ -269,6 +269,10 @@ export async function vistaNuevo(vista) {
       await borrador.borrar();
       recordar('ultimoCliente', b.cliente);
       recordar('ultimoPv', b.pv);
+      // Lo que más carga este técnico queda arriba en "Más usados"
+      const uso = recordar('uso-' + b.cliente) || {};
+      for (const it of items) uso[it.cod] = (uso[it.cod] || 0) + 1;
+      recordar('uso-' + b.cliente, uso);
       aviso(navigator.onLine ? 'Remito guardado. Enviando…' : 'Sin señal: queda guardado y se envía solo al volver la conexión.', 'ok');
       refrescarPestanas();
       ir('mis');

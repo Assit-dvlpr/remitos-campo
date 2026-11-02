@@ -42,6 +42,24 @@ export function fechaSerial(iso) {
 
 const vacio = v => v === null || v === undefined || String(v).trim() === '';
 
+// ---------- Unidades de negocio de los ítems ----------
+export const UNIDADES = { comun: 'Comunes', ml: 'Mediciones laborales', se: 'Seguridad eléctrica' };
+
+// Sugerencia según el nombre del servicio (se corrige a mano en Configuración)
+export function sugerirUnidad(servicio) {
+  const s = norm(servicio);
+  // "KM RECORRIDO" sí; "radio 150 km" en la descripción de otro servicio, no
+  if (/^KM\b|KM RECORRIDO|KILOMETR|DIA DE CAMPO/.test(s)) return 'comun';
+  if (/ELECTRIC|PUESTA A TIERRA|\bPAT\b|TERMOGRAF|TRAILER|CABLE|DISYUNT|AREAS PELIGROSAS/.test(s)) return 'se';
+  return 'ml';
+}
+
+// Orden "más usados": primero lo que más carga este técnico, después lo que más se cargó en la planilla
+export function masUsados(items, usoLocal = {}, cuantos = 6) {
+  const puntaje = it => (usoLocal[it.cod] || 0) * 1000 + (it.uso || 0);
+  return items.filter(it => puntaje(it) > 0).sort((a, b) => puntaje(b) - puntaje(a)).slice(0, cuantos);
+}
+
 // ---------- Campos adicionales por cliente ----------
 // def = { campo, etiqueta, columna, quien: 'tecnico'|'revisor'|'auto', origen, obligatorio }
 // origen: "Coordinación, HSE" (lista fija) · "Tabla3[LINEA]" (columna de una tabla del Excel)

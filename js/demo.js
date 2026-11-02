@@ -174,6 +174,8 @@ export const api = {
   async agregarUsuario() {},
   async urlLista() { return null; },
   async resolverExcel() { throw new Error('En modo demo no se vincula un Excel real.'); },
+  async contarItems() { return { 50: 12, 40: 9, 30: 4 }; },
+
   async leerTabla() {
     return {
       encabezados: ['LINEA', 'CENTRO DE COSTO', 'PSL'],

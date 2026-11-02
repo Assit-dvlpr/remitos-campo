@@ -1,7 +1,7 @@
 // Acceso a SharePoint y Excel por Microsoft Graph, con la sesión del usuario.
 import { CONFIG } from './config.js';
 import { obtenerToken } from './auth.js';
-import { planificarEscritura, filasDeRemito, columnasCliente } from './excel.js';
+import { planificarEscritura, filasDeRemito, columnasCliente, norm } from './excel.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const esperar = ms => new Promise(r => setTimeout(r, ms));
@@ -472,6 +472,21 @@ export const api = {
     const it = await g(`/shares/u!${b64}/driveItem?$select=id,name,webUrl,parentReference`)
       .catch(e => { throw new Error('No se pudo abrir el vínculo del Excel. Copialo de nuevo desde SharePoint (··· → Copiar vínculo). ' + e.message); });
     return { driveId: it.parentReference.driveId, itemId: it.id, nombre: it.name, webUrl: it.webUrl };
+  },
+
+  // Cuenta cuántas veces se cargó cada ítem en las últimas filas de la planilla (para "Más usados")
+  async contarItems(excel, tabla, encabezadoItem, ultimas = 500) {
+    return conSesion(excel, async h => {
+      const t = `${wb(excel)}/tables('${comillas(tabla)}')`;
+      const enc = (await g(`${t}/headerRowRange?$select=values`, { headers: h })).values[0];
+      const i = enc.map(norm).indexOf(norm(encabezadoItem));
+      if (i < 0) return {};
+      const v = (await g(`${t}/columns/itemAt(index=${i})/dataBodyRange?$select=values`, { headers: h })).values
+        .map(f => f[0]).filter(x => x !== '' && x !== null);
+      const cuenta = {};
+      for (const cod of v.slice(-ultimas)) cuenta[cod] = (cuenta[cod] || 0) + 1;
+      return cuenta;
+    });
   },
 
   // Lee una tabla auxiliar completa (para las opciones de los campos adicionales)
