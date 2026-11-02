@@ -86,11 +86,11 @@ export async function vistaNuevo(vista) {
           </select>`).join('')}
         <p class="ayuda" id="autos">${(cli.extras || []).filter(d => d.quien === 'auto' && autos[d.campo] !== '')
           .map(d => `${esc(d.etiqueta)} <span class="chip">${esc(autos[d.campo])}</span>`).join(' ')}</p>
-        <label for="f-estab">Establecimiento</label>
+        <label for="f-estab">Establecimiento / Pozo</label>
         ${cli.establecimientos?.length ? `<select id="f-estab">
           <option value="">Elegir…</option>
           ${cli.establecimientos.map(e => `<option ${e.nombre === b.establecimiento ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}
-        </select>` : `<input id="f-estab" value="${esc(b.establecimiento)}" placeholder="Lugar del trabajo">`}
+        </select>` : `<input id="f-estab" value="${esc(b.establecimiento)}" placeholder="Ej.: LOC-319 YPF">`}
         <p class="ayuda" id="zona">${est ? `Zona <span class="chip">${esc(est.zona)}</span>` : ''}</p>
       </section>
 
@@ -200,7 +200,7 @@ export async function vistaNuevo(vista) {
     if (!normalizarRemito(b.pv, b.numero)) err.push('Falta el número de remito.');
     if (!b.fechaRemito) err.push('Falta la fecha.');
     else if (b.fechaRemito > hoy()) err.push('La fecha no puede ser futura.');
-    if (!b.establecimiento) err.push('Elegí el establecimiento.');
+    if (!b.establecimiento) err.push('Completá el establecimiento o pozo.');
     if (!b.tecnico.trim()) err.push('Falta el nombre del técnico.');
     if (!cli.items.some(it => it.planilla !== false && +b.cant[it.cod] > 0)) err.push('Cargá al menos un servicio.');
     for (const d of (cli.extras || []).filter(x => x.quien === 'tecnico' && x.obligatorio)) {

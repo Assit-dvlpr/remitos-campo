@@ -26,7 +26,7 @@ const POR_DEFECTO = {
 
 const ETIQUETAS = {
   fechaSolicitud: 'Fecha de solicitud', remito: 'N° de remito', fechaRemito: 'Fecha del remito', item: 'Ítem',
-  cant: 'Cantidad', establecimiento: 'Establecimiento', periodo: 'Período', zona: 'Zona', responsable: 'Responsable técnico',
+  cant: 'Cantidad', establecimiento: 'Establecimiento / Pozo', periodo: 'Período', zona: 'Zona', responsable: 'Responsable técnico',
 };
 // Sin estas columnas no se puede escribir un remito; las demás son opcionales
 const OBLIGATORIAS = ['remito', 'item', 'cant'];

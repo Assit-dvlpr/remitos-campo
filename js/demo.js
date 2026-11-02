@@ -105,6 +105,13 @@ export const api = {
     return u ? (await fetch(u)).blob() : null;
   },
 
+  async eliminarRemito(remito) {
+    const d = leer();
+    for (const id of [remito.archivoId, ...(remito.paginas || []).map(p => p.archivoId)]) delete d.pdfs[id];
+    d.remitos = d.remitos.filter(r => r.id !== remito.id);
+    guardar(d);
+  },
+
   async fotoOriginal(pagina) {
     return (await fetch(leer().pdfs[pagina.archivoId])).blob();
   },

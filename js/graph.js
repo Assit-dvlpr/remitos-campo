@@ -334,6 +334,18 @@ export const api = {
     return descargar(await driveId(), remito.archivoId);
   },
 
+  // Elimina el remito, su PDF y sus fotos originales. Todo va a la papelera de reciclaje del sitio.
+  async eliminarRemito(remito) {
+    const sid = await sitioId();
+    const lid = await listaId(CONFIG.listaRemitos);
+    const did = await driveId();
+    const archivos = [remito.archivoId, ...(remito.paginas || []).map(p => p.archivoId)].filter(Boolean);
+    for (const id of archivos) {
+      await g(`/drives/${did}/items/${id}`, { method: 'DELETE' }).catch(e => { if (e.status !== 404) throw e; });
+    }
+    await g(`/sites/${sid}/lists/${lid}/items/${remito.id}`, { method: 'DELETE' });
+  },
+
   // ---------- Retoque de fotos en la revisión ----------
 
   async fotoOriginal(pagina) {

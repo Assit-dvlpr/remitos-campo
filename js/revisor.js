@@ -64,7 +64,7 @@ async function detalle(vista, id) {
             <div><label for="f-solicitud">Fecha de solicitud</label><input id="f-solicitud" type="date" value="${esc(r.fechaSolicitud)}"></div>
             <div><label for="f-periodo">Período</label><input id="f-periodo" type="month" value="${esc(r.periodo)}"></div>
           </div>
-          <label for="f-estab">Establecimiento</label>
+          <label for="f-estab">Establecimiento / Pozo</label>
           ${cli.establecimientos?.length ? `<select id="f-estab">${cli.establecimientos.map(e => `<option ${e.nombre === r.establecimiento ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}
             ${cli.establecimientos.some(e => e.nombre === r.establecimiento) ? '' : `<option selected>${esc(r.establecimiento)}</option>`}</select>`
             : `<input id="f-estab" value="${esc(r.establecimiento)}">`}
@@ -104,6 +104,9 @@ async function detalle(vista, id) {
           <div class="acciones">
             <button id="btn-guardar">Guardar cambios</button>
             <button class="peligro" id="btn-rechazar">Rechazar</button>
+          </div>
+          <div class="acciones">
+            <button class="peligro" id="btn-eliminar">Eliminar remito</button>
           </div>
           <p class="ayuda">Excel: ${esc(cli.excel?.nombre || '—')}</p>
         </section>
@@ -248,6 +251,17 @@ async function detalle(vista, id) {
     try { const f = await guardarFotos(); await estado.api.actualizar({ ...leer(), ...f }); aviso('Cambios guardados.', 'ok'); }
     catch (e) { msg(esc(e.message), 'error'); }
     finally { ocupado(false); }
+  };
+
+  $('#btn-eliminar', vista).onclick = async () => {
+    if (!confirm(`¿Eliminar el remito ${r.remito} (${r.establecimiento}), su PDF y sus fotos?\n\n` +
+      'Va a la papelera de reciclaje del sitio de SharePoint: se puede recuperar durante 93 días.')) return;
+    ocupado(true);
+    try {
+      await estado.api.eliminarRemito(r);
+      aviso(`Remito ${r.remito} eliminado.`, 'ok');
+      ir('revision');
+    } catch (e) { msg(esc(e.message), 'error'); ocupado(false); }
   };
 
   $('#btn-rechazar', vista).onclick = async () => {
