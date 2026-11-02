@@ -1,6 +1,7 @@
 // Configuración inicial (administrador): estructura en SharePoint, usuarios y clientes con su Excel.
 import { CONFIG } from './config.js';
-import { estado, $, esc, aviso, recordar } from './app.js';
+import { estado, $, $$, esc, aviso, recordar } from './app.js';
+import { tablasDeExtras, resolverExtras } from './excel.js';
 
 // Valores por defecto tomados de la planilla de Oldelval (se pueden cambiar en pantalla).
 // Un cliente nuevo arranca con los mismos encabezados, que se ajustan a su planilla.
@@ -114,6 +115,17 @@ export async function vistaConfiguracion(vista) {
     };
     let excel = actual.excel?.itemId ? actual.excel : null;
     let catalogo = actual.items ? { items: actual.items, establecimientos: actual.establecimientos || [] } : null;
+    let extras = (actual.extras || []).map(d => ({ ...d }));
+    const filaExtra = d => `<div class="extra dos-col" style="border-top:1px solid var(--borde);padding-top:8px;margin-top:8px">
+        <div><label>Nombre</label><input data-k="etiqueta" value="${esc(d.etiqueta || '')}" placeholder="Línea"></div>
+        <div><label>Columna en la planilla</label><input data-k="columna" value="${esc(d.columna || '')}" placeholder="LÍNEA"></div>
+        <div><label>Lo completa</label><select data-k="quien">
+          ${[['tecnico', 'Técnico'], ['revisor', 'Revisor'], ['auto', 'Automático']].map(([v, t]) => `<option value="${v}" ${d.quien === v ? 'selected' : ''}>${t}</option>`).join('')}
+        </select></div>
+        <div><label>Opciones</label><input data-k="origen" value="${esc(d.origen || '')}" placeholder="Tabla3[LINEA] o Coordinación, HSE"></div>
+        <div><label><input type="checkbox" data-k="obligatorio" ${d.obligatorio ? 'checked' : ''} style="width:auto;min-height:0"> Obligatorio</label></div>
+        <div><button type="button" class="peligro" data-quitar-extra>Quitar campo</button></div>
+      </div>`;
 
     sec.innerHTML = `
       <h2>3. Clientes y su Excel</h2>
@@ -139,6 +151,19 @@ export async function vistaConfiguracion(vista) {
         <p class="ayuda">Tal cual el encabezado en la planilla. Dejá vacía la que no exista; N° de remito, Ítem y Cantidad son obligatorias.</p>
         ${Object.keys(POR_DEFECTO.columnas).map(k => `<label for="col-${k}">${ETIQUETAS[k]}${OBLIGATORIAS.includes(k) ? ' *' : ''}</label><input id="col-${k}" value="${esc(c.columnas[k])}">`).join('')}
       </details>
+      <label for="c-resp">Responsable en la planilla</label>
+      <select id="c-resp">
+        <option value="apellido" ${actual.responsable !== 'completo' ? 'selected' : ''}>Apellido (ej. Valverdi)</option>
+        <option value="completo" ${actual.responsable === 'completo' ? 'selected' : ''}>Nombre completo (ej. Nicolas Valverdi)</option>
+      </select>
+      <p class="ayuda">Si fueron dos técnicos, queda "Apellido - Apellido".</p>
+      <details ${extras.length ? 'open' : ''} style="margin-top:12px"><summary>Campos adicionales de este cliente (${extras.length})</summary>
+        <p class="ayuda">Columnas propias de su planilla. Opciones: lista separada por comas (<b>Coordinación, HSE</b>)
+          o una columna de una tabla del Excel (<b>Tabla3[LINEA]</b>). Automático: <b>Tabla3[CENTRO DE COSTO] según Línea</b>.
+          Se leen al tocar "Vincular y leer catálogo".</p>
+        <div id="extras">${extras.map(filaExtra).join('')}</div>
+        <div class="acciones"><button type="button" id="btn-extra">+ Agregar campo</button></div>
+      </details>
       <div class="acciones"><button id="btn-leer" class="primario">Vincular y leer catálogo</button></div>
       <div id="catalogo"></div>
       <div class="acciones">
@@ -153,9 +178,32 @@ export async function vistaConfiguracion(vista) {
         <div class="tabla-scroll"><table class="tabla"><tr><th>Ítem</th><th>Servicio</th><th>A planilla</th></tr>
         ${catalogo.items.map(i => `<tr><td>${esc(i.cod)}</td><td>${esc(i.servicio)}</td><td>${i.planilla === false ? 'No' : 'Sí'}</td></tr>`).join('')}</table></div>
         ${catalogo.establecimientos.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Zona</th><th>Establecimiento</th></tr>
-        ${catalogo.establecimientos.map(e => `<tr><td>${esc(e.zona)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}</table></div>` : ''}`;
+        ${catalogo.establecimientos.map(e => `<tr><td>${esc(e.zona)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}</table></div>` : ''}
+        ${extras.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Campo</th><th>Columna</th><th>Lo completa</th><th>Valores</th></tr>
+        ${extras.map(d => `<tr><td>${esc(d.etiqueta)}</td><td>${esc(d.columna)}</td><td>${{ tecnico: 'Técnico', revisor: 'Revisor', auto: 'Automático' }[d.quien]}</td>
+          <td>${d.quien === 'auto' ? `${Object.keys(d.mapa || {}).length} valores según ${esc(extras.find(x => x.campo === d.segun)?.etiqueta || '')}` : esc((d.opciones || []).join(', '))}</td></tr>`).join('')}</table></div>` : ''}`;
     };
     pintarCatalogo();
+
+    // Campos adicionales: leer lo que está en pantalla (las opciones se completan al leer el catálogo)
+    const leerExtras = () => $$('#extras .extra', sec).map(div => {
+      const v = k => $(`[data-k="${k}"]`, div);
+      const etiqueta = v('etiqueta').value.trim();
+      return {
+        campo: claveDe(etiqueta), etiqueta, columna: v('columna').value.trim(), quien: v('quien').value,
+        origen: v('origen').value.trim(), obligatorio: v('obligatorio').checked,
+      };
+    }).filter(d => d.etiqueta && d.columna);
+    $('#btn-extra', sec).onclick = () => {
+      $('#extras', sec).insertAdjacentHTML('beforeend', filaExtra({ quien: 'tecnico' }));
+      $('#btn-guardar', sec).disabled = true; // hay que volver a leer el catálogo
+    };
+    $('#extras', sec).addEventListener('click', e => {
+      if (!e.target.closest('[data-quitar-extra]')) return;
+      e.target.closest('.extra').remove();
+      $('#btn-guardar', sec).disabled = true;
+    });
+    $('#extras', sec).addEventListener('input', () => { $('#btn-guardar', sec).disabled = true; });
 
     const lectura = () => ({
       tablaTarifas: $('#c-tarifas', sec).value.trim(),
@@ -174,9 +222,20 @@ export async function vistaConfiguracion(vista) {
         $('#c-excel', sec).innerHTML = excel ? 'Vinculado: <b>' + esc(excel.nombre) + '</b>' : '';
         catalogo = await estado.api.leerCatalogo(excel, lectura());
         if (!catalogo.items.length) throw new Error('No se encontraron ítems en la tabla de tarifas.');
-        if (!catalogo.items.some(i => String(i.cod).toUpperCase() === 'KM')) {
-          catalogo.items.push({ cod: 'KM', servicio: 'KILÓMETROS', planilla: false, unidad: 'km' });
-        }
+        // Kilómetros: si el cliente los factura como ítem (ej. "KM RECORRIDO"), se usa ese y va a la planilla;
+        // si no, se agrega uno propio que solo queda registrado en el remito
+        const itemKm = catalogo.items.find(i => /\bKM\b|KIL[OÓ]METR/i.test(i.servicio));
+        if (itemKm) itemKm.unidad = 'km';
+        else catalogo.items.push({ cod: 'KM', servicio: 'KILÓMETROS', planilla: false, unidad: 'km' });
+        // Campos adicionales: opciones y valores automáticos desde las tablas del Excel
+        const defs = leerExtras();
+        if (defs.length) {
+          const tablas = {};
+          for (const t of tablasDeExtras(defs)) tablas[t] = await estado.api.leerTabla(excel, t);
+          const r = resolverExtras(defs, tablas);
+          if (r.error) throw new Error(r.error);
+          extras = r.extras;
+        } else extras = [];
         pintarCatalogo();
         $('#btn-guardar', sec).disabled = false;
       } catch (err) { aviso(err.message, 'error'); }
@@ -200,6 +259,8 @@ export async function vistaConfiguracion(vista) {
           establecimientos: catalogo.establecimientos,
           lectura: lectura(),
           excel: { ...(excel || {}), tabla: $('#c-tabla', sec).value.trim(), columnas },
+          extras,
+          responsable: $('#c-resp', sec).value,
         },
       };
       try {

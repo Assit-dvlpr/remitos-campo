@@ -1,6 +1,6 @@
 # Remitos de Campo — Alonger SRL
 
-**Versión 1.2.0** · Desarrollado por Ignacio Burd
+**Versión 1.3.0** · Desarrollado por Ignacio Burd
 
 App web para que el técnico cargue el remito en campo (servicios y foto del remito firmado) y la oficina solo lo revise.
 Al aprobarlo se escriben las filas en el Excel del cliente. Piloto: **Oldelval**.
@@ -100,6 +100,21 @@ Configuración → 3 → **+ Nuevo cliente**: nombre, vínculo de su Excel (subi
 tabla de ítems (tarifas) y, si tiene, hoja y rango de establecimientos. En "Columnas de la planilla" van los
 encabezados tal cual; los que su planilla no tenga se dejan vacíos (N° de remito, Ítem y Cantidad son obligatorios).
 Sin establecimientos, el técnico escribe el lugar a mano. Con más de un cliente, el técnico elige el cliente al cargar.
+
+**Responsable:** apellido (Oldelval: "Valverdi") o nombre completo (Halliburton: "Nicolas Valverdi"). Con acompañante
+queda "Valverdi - Caro".
+
+**Campos adicionales** (columnas propias de un cliente): nombre, columna de la planilla, quién lo completa y opciones.
+- Lista fija: `Coordinación, HSE` · Columna de una tabla del Excel: `Tabla3[LINEA]`.
+- Automático: `Tabla3[CENTRO DE COSTO] según Línea` (toma el valor de la fila de la línea elegida).
+- Un campo con una sola opción viene elegido. Si una columna es fórmula en la planilla, no se configura: la app la respeta.
+
+Ejemplo Halliburton (hoja *Planilla de Carga*, `Tabla12`, tarifas `Tabla17456`, sin establecimientos, Destino = establecimiento):
+| Campo | Columna | Lo completa | Opciones |
+|---|---|---|---|
+| Línea | LÍNEA | Técnico (obligatorio) | `Tabla3[LINEA]` |
+| Centro de costo | CENTRO DE COSTO | Automático | `Tabla3[CENTRO DE COSTO] según Línea` |
+| Sector | SECTOR | Revisor (obligatorio) | `Coordinación, HSE` |
 
 ## Límites conocidos (piloto)
 - Cada planilla tiene que tener una tabla de ítems (código + servicio) y una tabla de carga con una fila por servicio.

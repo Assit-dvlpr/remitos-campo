@@ -1,6 +1,10 @@
 // Modo demostración: misma API que graph.js, pero guarda en el navegador y simula la planilla.
 // Sirve para probar la interfaz antes de tener el registro en Entra. Los datos son ficticios.
-import { planificarEscritura, filasDeRemito } from './excel.js';
+import { planificarEscritura, filasDeRemito, columnasCliente, norm } from './excel.js';
+
+// La planilla simulada tiene columnas fijas: los campos adicionales que no estén ahí solo se registran
+const columnasDemo = cliente => Object.fromEntries(Object.entries(columnasCliente(cliente))
+  .filter(([, v]) => !v || ENCABEZADOS.some(h => norm(h) === norm(v))));
 
 const CLAVE = 'demo-remitos';
 const leer = () => JSON.parse(localStorage.getItem(CLAVE) || '{"remitos":[],"pdfs":{},"tabla":null}');
@@ -105,11 +109,11 @@ export const api = {
     const cuerpo = d.tabla || tablaInicial();
     const plan = planificarEscritura({
       encabezados: ENCABEZADOS, cuerpo, direccion: `'Planilla Carga'!A5:S${4 + cuerpo.length}`,
-      columnas: cliente.excel.columnas, filas: filasDeRemito(remito, cliente.items),
+      columnas: columnasDemo(cliente), filas: filasDeRemito(remito, cliente.items),
     });
     if (plan.error) throw Object.assign(new Error(plan.error), { codigo: plan.duplicado ? 'duplicado' : 'planilla' });
-    const idx = Object.fromEntries(Object.entries(cliente.excel.columnas).map(([k, v]) =>
-      [k, ENCABEZADOS.findIndex(h => h.replace(/\s+/g, ' ') === v)]));
+    const idx = Object.fromEntries(Object.entries(columnasDemo(cliente)).filter(([, v]) => v)
+      .map(([k, v]) => [k, ENCABEZADOS.findIndex(h => norm(h) === norm(v))]));
     const largoInicial = cuerpo.length;
     filasDeRemito(remito, cliente.items).forEach((f, i) => {
       const r = plan.desde - 5 + i;
@@ -135,6 +139,13 @@ export const api = {
   async agregarUsuario() {},
   async urlLista() { return null; },
   async resolverExcel() { throw new Error('En modo demo no se vincula un Excel real.'); },
+  async leerTabla() {
+    return {
+      encabezados: ['LINEA', 'CENTRO DE COSTO', 'PSL'],
+      filas: [['BUNDLE', '6004510016', 'PERIFERICOS'], ['HPS', '6004510017', 'HPS'], ['MPD', '6004510115', 'MPD']],
+    };
+  },
+
   async leerCatalogo(excel, lectura) {
     const c = CLIENTES_DEMO.demo;
     return { items: c.items.filter(i => i.cod !== 'KM'), establecimientos: lectura?.hojaEstab ? c.establecimientos : [] };

@@ -41,6 +41,67 @@ export function fechaSerial(iso) {
 
 const vacio = v => v === null || v === undefined || String(v).trim() === '';
 
+// ---------- Campos adicionales por cliente ----------
+// def = { campo, etiqueta, columna, quien: 'tecnico'|'revisor'|'auto', origen, obligatorio }
+// origen: "Coordinación, HSE" (lista fija) · "Tabla3[LINEA]" (columna de una tabla del Excel)
+//         · para 'auto': "Tabla3[CENTRO DE COSTO] según Línea" (valor de la fila cuya clave elige otro campo)
+
+const REF = /^\s*([^[\]]+?)\s*\[\s*([^\]]+?)\s*\]\s*$/;
+
+// Tablas del Excel que hace falta leer para resolver los orígenes
+export function tablasDeExtras(defs) {
+  return [...new Set(defs.map(d => (String(d.origen || '').split(/\s+según\s+/i)[0].match(REF) || [])[1]).filter(Boolean))];
+}
+
+// Completa opciones (y mapa para los automáticos) leyendo las tablas. Devuelve { extras } o { error }.
+export function resolverExtras(defs, tablas) {
+  const col = (tabla, nombre) => {
+    const t = tablas[tabla];
+    if (!t) throw new Error(`No se encontró la tabla "${tabla}" en el Excel.`);
+    const i = t.encabezados.map(norm).indexOf(norm(nombre));
+    if (i < 0) throw new Error(`La tabla "${tabla}" no tiene la columna "${nombre}".`);
+    return i;
+  };
+  try {
+    const out = defs.map(d => ({ ...d }));
+    for (const d of out.filter(x => x.quien !== 'auto')) {
+      const m = String(d.origen || '').match(REF);
+      if (m) {
+        const i = col(m[1], m[2]);
+        d.opciones = [...new Set(tablas[m[1]].filas.map(f => String(f[i] ?? '').trim()).filter(Boolean))];
+        d.tabla = m[1]; d.columnaTabla = m[2];
+      } else {
+        d.opciones = String(d.origen || '').split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+    for (const d of out.filter(x => x.quien === 'auto')) {
+      const [ref, segun] = String(d.origen || '').split(/\s+según\s+/i);
+      const m = (ref || '').match(REF);
+      if (!m || !segun) throw new Error(`"${d.etiqueta}": el origen automático va como Tabla[COLUMNA] según <campo>.`);
+      const fuente = out.find(x => norm(x.etiqueta) === norm(segun) && x.quien !== 'auto');
+      if (!fuente || fuente.tabla !== m[1]) throw new Error(`"${d.etiqueta}": el campo "${segun}" tiene que tomar sus opciones de la tabla ${m[1]}.`);
+      const iClave = col(m[1], fuente.columnaTabla), iValor = col(m[1], m[2]);
+      d.segun = fuente.campo;
+      d.mapa = Object.fromEntries(tablas[m[1]].filas.filter(f => !vacio(f[iClave])).map(f => [norm(f[iClave]), f[iValor] ?? '']));
+    }
+    return { extras: out };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Recalcula los campos automáticos a partir de los que eligió una persona
+export function completarAutomaticos(defs, valores) {
+  const v = { ...valores };
+  for (const d of (defs || []).filter(x => x.quien === 'auto')) v[d.campo] = d.mapa?.[norm(v[d.segun])] ?? '';
+  return v;
+}
+
+// Columnas a escribir: las fijas más las de los campos adicionales
+export function columnasCliente(cliente) {
+  return { ...(cliente.excel?.columnas || {}), ...Object.fromEntries((cliente.extras || []).map(d => [d.campo, d.columna])) };
+}
+
 // Convierte un remito aprobado en las filas para la planilla (una por ítem que va a la planilla).
 export function filasDeRemito(remito, catalogoItems) {
   const vaPlanilla = cod => (catalogoItems.find(i => String(i.cod) === String(cod))?.planilla) !== false;
@@ -56,6 +117,7 @@ export function filasDeRemito(remito, catalogoItems) {
       periodo: remito.periodo ? fechaSerial(remito.periodo + '-01') : '',
       zona: remito.zona,
       responsable: remito.tecnico,
+      ...(remito.extras || {}), // campos adicionales del cliente (ej. línea, centro de costo, sector)
     }));
 }
 
@@ -93,10 +155,12 @@ export function planificarEscritura({ encabezados, cuerpo, direccion, columnas, 
   const dup = cuerpo.findIndex(f => norm(f[idx.remito]) === remito);
   if (dup >= 0) return { error: `El remito ${filas[0].remito} ya está en la planilla (fila ${d.fila1 + dup}).`, duplicado: true };
 
-  // Última fila con datos en alguna columna mapeada
+  // Última fila cargada: la que tiene remito, ítem o cantidad. Otras columnas pueden venir
+  // precargadas en filas vacías (ej. Sector y Período en Halliburton) y no cuentan.
   const usadas = Object.values(idx);
+  const claves = [idx.remito, idx.item, idx.cant];
   let ultima = -1;
-  cuerpo.forEach((f, r) => { if (usadas.some(c => !vacio(f[c]))) ultima = r; });
+  cuerpo.forEach((f, r) => { if (claves.some(c => !vacio(f[c]))) ultima = r; });
   const inicio = ultima + 1;
 
   // Columnas mapeadas agrupadas en tramos contiguos (para no pisar las del medio)

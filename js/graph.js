@@ -1,7 +1,7 @@
 // Acceso a SharePoint y Excel por Microsoft Graph, con la sesión del usuario.
 import { CONFIG } from './config.js';
 import { obtenerToken } from './auth.js';
-import { planificarEscritura, filasDeRemito } from './excel.js';
+import { planificarEscritura, filasDeRemito, columnasCliente } from './excel.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const esperar = ms => new Promise(r => setTimeout(r, ms));
@@ -121,7 +121,8 @@ function aCampos(r) {
     Periodo: r.periodo || '',
     Tecnico: r.tecnico,
     TecnicoEmail: r.tecnicoEmail,
-    Items: JSON.stringify(r.items || []),
+    // Con campos adicionales se guarda { items, extras }; sin ellos, la lista de ítems sola (formato original)
+    Items: JSON.stringify(r.extras && Object.keys(r.extras).length ? { items: r.items || [], extras: r.extras } : r.items || []),
     Kilometros: +r.km || 0,
     Observaciones: r.observaciones || '',
     Estado: r.estado,
@@ -137,8 +138,11 @@ function aCampos(r) {
 
 function deItem(it) {
   const f = it.fields;
-  let items = [];
-  try { items = JSON.parse(f.Items || '[]'); } catch { /* vacío */ }
+  let items = [], extras = {};
+  try {
+    const j = JSON.parse(f.Items || '[]');
+    if (Array.isArray(j)) items = j; else ({ items = [], extras = {} } = j);
+  } catch { /* vacío */ }
   return {
     id: it.id,
     remito: f.Remito || f.Title,
@@ -151,6 +155,7 @@ function deItem(it) {
     tecnico: f.Tecnico,
     tecnicoEmail: f.TecnicoEmail,
     items,
+    extras,
     km: f.Kilometros || 0,
     observaciones: f.Observaciones || '',
     estado: f.Estado,
@@ -338,7 +343,7 @@ export const api = {
       ]);
       const plan = planificarEscritura({
         encabezados: enc.values[0], cuerpo: cuerpo.formulas, formatos: cuerpo.numberFormat,
-        direccion: cuerpo.address, columnas: ex.columnas, filas,
+        direccion: cuerpo.address, columnas: columnasCliente(cliente), filas,
       });
       if (plan.error) throw Object.assign(new Error(plan.error), { codigo: plan.duplicado ? 'duplicado' : 'planilla' });
       for (const { address, ...cambios } of plan.escrituras) {
@@ -415,6 +420,14 @@ export const api = {
     const b64 = btoa(unescape(encodeURIComponent(link.trim()))).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
     const it = await g(`/shares/u!${b64}/driveItem?$select=id,name,webUrl,parentReference`);
     return { driveId: it.parentReference.driveId, itemId: it.id, nombre: it.name, webUrl: it.webUrl };
+  },
+
+  // Lee una tabla auxiliar completa (para las opciones de los campos adicionales)
+  async leerTabla(excel, tabla) {
+    return conSesion(excel, async h => {
+      const v = (await g(`${wb(excel)}/tables('${comillas(tabla)}')/range?$select=values`, { headers: h })).values;
+      return { encabezados: v[0], filas: v.slice(1) };
+    });
   },
 
   // Lee ítems (tabla de tarifas) y establecimientos (hoja y rango) desde el mismo Excel

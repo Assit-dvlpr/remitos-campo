@@ -6,18 +6,28 @@ import {
 import { cola, borrador, procesarCola } from './cola.js';
 import { prepararFoto, armarPdf } from './pdf.js';
 import { editarFoto, miniatura } from './fotos.js';
+import { completarAutomaticos } from './excel.js';
+
+// Cómo figura el técnico en la planilla de ese cliente: apellido (Valverdi) o nombre completo (Nicolas Valverdi)
+const nombreTecnico = cli => (cli?.responsable === 'completo' ? estado.usuario.displayName : estado.usuario.nombre);
+const apellidoDe = s => String(s || '').trim().split(/\s+/).pop();
+// Si fueron dos: "Valverdi - Caro"
+const responsable = b => (b.acompanante?.trim() ? `${apellidoDe(b.tecnico)} - ${b.acompanante.trim()}` : b.tecnico.trim());
 
 function nuevoBorrador() {
   const claves = Object.keys(estado.clientes || {});
+  const cliente = recordar('ultimoCliente') && claves.includes(recordar('ultimoCliente')) ? recordar('ultimoCliente') : claves[0];
   return {
     idLocal: uid(),
     itemId: null,
-    cliente: recordar('ultimoCliente') && claves.includes(recordar('ultimoCliente')) ? recordar('ultimoCliente') : claves[0],
+    cliente,
     pv: recordar('ultimoPv') || '0001',
     numero: '',
     fechaRemito: hoy(),
     establecimiento: '',
-    tecnico: estado.usuario.nombre,
+    tecnico: nombreTecnico(estado.clientes?.[cliente]),
+    acompanante: '',
+    extras: {},
     cant: {},
     observaciones: '',
     paginas: [],
@@ -41,8 +51,13 @@ export async function vistaNuevo(vista) {
 
   function pintar() {
     const cli = estado.clientes[b.cliente];
-    const est = cli.establecimientos.find(e => e.nombre === b.establecimiento);
+    const est = (cli.establecimientos || []).find(e => e.nombre === b.establecimiento);
     const claves = Object.keys(estado.clientes);
+    b.extras = b.extras || {};
+    const extrasTecnico = (cli.extras || []).filter(d => d.quien === 'tecnico');
+    // Un campo con una sola opción viene elegido
+    for (const d of extrasTecnico) if (!b.extras[d.campo] && d.opciones?.length === 1) b.extras[d.campo] = d.opciones[0];
+    const autos = completarAutomaticos(cli.extras, b.extras);
     vista.innerHTML = `
       <h1 class="titulo">${b.itemId ? 'Corregir remito' : 'Nuevo remito'}</h1>
       ${b.comentario ? `<div class="mensaje alerta"><b>Observación de la revisión:</b> ${esc(b.comentario)}</div>` : ''}
@@ -61,6 +76,16 @@ export async function vistaNuevo(vista) {
           <div><label for="f-fecha">Fecha</label><input id="f-fecha" type="date" value="${esc(b.fechaRemito)}"></div>
           <div><label for="f-tecnico">Técnico</label><input id="f-tecnico" value="${esc(b.tecnico)}"></div>
         </div>
+        <label for="f-acomp">Acompañante (opcional, apellido)</label>
+        <input id="f-acomp" value="${esc(b.acompanante || '')}" placeholder="Si fueron dos técnicos">
+        ${extrasTecnico.map(d => `
+          <label for="x-${esc(d.campo)}">${esc(d.etiqueta)}${d.obligatorio ? '' : ' (opcional)'}</label>
+          <select id="x-${esc(d.campo)}" data-extra="${esc(d.campo)}">
+            <option value="">Elegir…</option>
+            ${(d.opciones || []).map(o => `<option ${o === b.extras[d.campo] ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+          </select>`).join('')}
+        <p class="ayuda" id="autos">${(cli.extras || []).filter(d => d.quien === 'auto' && autos[d.campo] !== '')
+          .map(d => `${esc(d.etiqueta)} <span class="chip">${esc(autos[d.campo])}</span>`).join(' ')}</p>
         <label for="f-estab">Establecimiento</label>
         ${cli.establecimientos?.length ? `<select id="f-estab">
           <option value="">Elegir…</option>
@@ -132,11 +157,24 @@ export async function vistaNuevo(vista) {
 
   function conectar() {
     const on = (sel, ev, fn) => $(sel, vista)?.addEventListener(ev, fn);
-    on('#f-cliente', 'change', e => { b.cliente = e.target.value; b.establecimiento = ''; b.cant = {}; guardarBorrador(); pintar(); });
+    on('#f-cliente', 'change', e => {
+      b.cliente = e.target.value; b.establecimiento = ''; b.cant = {}; b.extras = {};
+      if (!b.tecnicoEditado) b.tecnico = nombreTecnico(estado.clientes[b.cliente]);
+      guardarBorrador(); pintar();
+    });
+    on('#f-acomp', 'input', e => { b.acompanante = e.target.value; guardarBorrador(); });
+    vista.querySelectorAll('[data-extra]').forEach(sel => sel.addEventListener('input', () => {
+      b.extras[sel.dataset.extra] = sel.value;
+      const cli = estado.clientes[b.cliente];
+      const autos = completarAutomaticos(cli.extras, b.extras);
+      $('#autos', vista).innerHTML = (cli.extras || []).filter(d => d.quien === 'auto' && autos[d.campo] !== '')
+        .map(d => `${esc(d.etiqueta)} <span class="chip">${esc(autos[d.campo])}</span>`).join(' ');
+      guardarBorrador();
+    }));
     on('#f-pv', 'input', e => { b.pv = e.target.value; guardarBorrador(); });
     on('#f-numero', 'input', e => { b.numero = e.target.value; guardarBorrador(); });
     on('#f-fecha', 'change', e => { b.fechaRemito = e.target.value; guardarBorrador(); });
-    on('#f-tecnico', 'input', e => { b.tecnico = e.target.value; guardarBorrador(); });
+    on('#f-tecnico', 'input', e => { b.tecnico = e.target.value; b.tecnicoEditado = true; guardarBorrador(); });
     on('#f-obs', 'input', e => { b.observaciones = e.target.value; guardarBorrador(); });
     on('#f-estab', 'input', e => {
       b.establecimiento = e.target.value;
@@ -165,6 +203,9 @@ export async function vistaNuevo(vista) {
     if (!b.establecimiento) err.push('Elegí el establecimiento.');
     if (!b.tecnico.trim()) err.push('Falta el nombre del técnico.');
     if (!cli.items.some(it => it.planilla !== false && +b.cant[it.cod] > 0)) err.push('Cargá al menos un servicio.');
+    for (const d of (cli.extras || []).filter(x => x.quien === 'tecnico' && x.obligatorio)) {
+      if (!b.extras?.[d.campo]) err.push(`Elegí ${d.etiqueta.toLowerCase()}.`);
+    }
     if (!b.paginas.length && !b.archivoPrevio) err.push('Falta la foto del remito firmado.');
     return err;
   }
@@ -192,11 +233,14 @@ export async function vistaNuevo(vista) {
           return;
         }
       }
-      const est = cli.establecimientos.find(e => e.nombre === b.establecimiento);
+      const est = (cli.establecimientos || []).find(e => e.nombre === b.establecimiento);
       const items = cli.items
         .filter(it => +b.cant[it.cod] > 0)
         .map(it => ({ cod: it.cod, servicio: it.servicio, cant: +b.cant[it.cod] }));
-      const kmItem = cli.items.find(it => it.planilla === false && String(it.cod).toUpperCase() === 'KM');
+      const kmItem = cli.items.find(it => it.unidad === 'km' || String(it.cod).toUpperCase() === 'KM');
+      // Solo lo que carga el técnico y lo que se calcula de eso; lo del revisor se completa en la oficina
+      const extras = completarAutomaticos(cli.extras, Object.fromEntries(
+        (cli.extras || []).filter(d => d.quien === 'tecnico').map(d => [d.campo, b.extras?.[d.campo] || ''])));
       const entrada = {
         idLocal: b.idLocal,
         itemId: b.itemId,
@@ -208,9 +252,10 @@ export async function vistaNuevo(vista) {
           fechaRemito: b.fechaRemito,
           establecimiento: b.establecimiento,
           zona: est?.zona || '',
-          tecnico: b.tecnico.trim(),
+          tecnico: responsable(b),
           tecnicoEmail: estado.usuario.email,
           items,
+          extras,
           km: kmItem ? +b.cant[kmItem.cod] || 0 : 0,
           observaciones: b.observaciones.trim(),
         },
@@ -298,6 +343,7 @@ export async function vistaMisRemitos(vista) {
         idLocal: r.idLocal || uid(), itemId: r.id, cliente: r.cliente, pv, numero,
         fechaRemito: r.fechaRemito, establecimiento: r.establecimiento, tecnico: r.tecnico,
         cant: Object.fromEntries(r.items.map(i => [i.cod, i.cant])),
+        extras: { ...(r.extras || {}) }, acompanante: '', tecnicoEditado: true,
         observaciones: r.observaciones, paginas: [], archivoPrevio: !!r.archivoId, comentario: r.comentario,
       };
       ir('nuevo');

@@ -4,6 +4,7 @@ import {
   estado, $, esc, fechaCorta, recordar, aviso, ir, claseEstado, normalizarRemito,
   htmlServicios, conectarServicios,
 } from './app.js';
+import { completarAutomaticos } from './excel.js';
 
 let urlPdf = null;
 
@@ -65,7 +66,15 @@ async function detalle(vista, id) {
           ${cli.establecimientos?.length ? `<select id="f-estab">${cli.establecimientos.map(e => `<option ${e.nombre === r.establecimiento ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}
             ${cli.establecimientos.some(e => e.nombre === r.establecimiento) ? '' : `<option selected>${esc(r.establecimiento)}</option>`}</select>`
             : `<input id="f-estab" value="${esc(r.establecimiento)}">`}
-          <p class="ayuda" id="zona">Zona <span class="chip">${esc(r.zona)}</span></p>
+          <p class="ayuda" id="zona">${r.zona ? `Zona <span class="chip">${esc(r.zona)}</span>` : ''}</p>
+          ${(cli.extras || []).filter(d => d.quien !== 'auto').map(d => {
+            const v = r.extras?.[d.campo] || (d.opciones?.length === 1 ? d.opciones[0] : '');
+            const ops = (d.opciones || []).includes(v) || !v ? d.opciones || [] : [v, ...(d.opciones || [])];
+            return `<label for="x-${esc(d.campo)}">${esc(d.etiqueta)}${d.quien === 'revisor' ? ' (lo completa la oficina)' : ''}</label>
+              <select id="x-${esc(d.campo)}" data-extra="${esc(d.campo)}"><option value="">Elegir…</option>
+              ${ops.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+          }).join('')}
+          <p class="ayuda" id="autos"></p>
         </section>
         <section class="tarjeta">
           <h2>Servicios</h2>
@@ -93,8 +102,19 @@ async function detalle(vista, id) {
   $('#f-estab', vista).addEventListener('input', e => {
     const est = (cli.establecimientos || []).find(x => x.nombre === e.target.value);
     r.zona = est?.zona || r.zona;
-    $('#zona', vista).innerHTML = `Zona <span class="chip">${esc(r.zona)}</span>`;
+    $('#zona', vista).innerHTML = r.zona ? `Zona <span class="chip">${esc(r.zona)}</span>` : '';
   });
+
+  // Campos adicionales: lo elegido en pantalla más lo que se calcula de eso (ej. centro de costo según línea)
+  const leerExtras = () => completarAutomaticos(cli.extras, Object.fromEntries(
+    [...vista.querySelectorAll('[data-extra]')].map(s => [s.dataset.extra, s.value])));
+  const pintarAutos = () => {
+    const v = leerExtras();
+    $('#autos', vista).innerHTML = (cli.extras || []).filter(d => d.quien === 'auto' && v[d.campo] !== '')
+      .map(d => `${esc(d.etiqueta)} <span class="chip">${esc(v[d.campo])}</span>`).join(' ');
+  };
+  vista.querySelectorAll('[data-extra]').forEach(s => s.addEventListener('input', pintarAutos));
+  pintarAutos();
 
   // Foto
   if (urlPdf) URL.revokeObjectURL(urlPdf);
@@ -116,7 +136,8 @@ async function detalle(vista, id) {
       periodo: $('#f-periodo', vista).value,
       establecimiento: $('#f-estab', vista).value,
       items: cli.items.filter(it => +cant[it.cod] > 0).map(it => ({ cod: it.cod, servicio: it.servicio, cant: +cant[it.cod] })),
-      km: +(cant.KM || cant.km || 0),
+      km: +(cant[cli.items.find(it => it.unidad === 'km')?.cod ?? 'KM'] || 0),
+      extras: leerExtras(),
       revisor: estado.usuario.displayName,
     };
   }
@@ -150,6 +171,9 @@ async function detalle(vista, id) {
     if (!d.fechaSolicitud) faltan.push('fecha de solicitud');
     if (!d.periodo) faltan.push('período');
     if (!d.tecnico) faltan.push('responsable');
+    for (const x of (cli.extras || []).filter(x => x.quien !== 'auto' && x.obligatorio)) {
+      if (!d.extras[x.campo]) faltan.push(x.etiqueta.toLowerCase());
+    }
     if (!d.items.some(i => cli.items.find(c => String(c.cod) === String(i.cod))?.planilla !== false)) faltan.push('al menos un servicio');
     if (faltan.length) { msg('Falta: ' + faltan.join(', ') + '.', 'error'); return; }
     if (!cli.excel?.itemId && estado.api.modo !== 'demo') { msg('Este cliente no tiene Excel vinculado (Configuración).', 'error'); return; }
