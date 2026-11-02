@@ -418,14 +418,16 @@ export const api = {
   // Resuelve el link "Compartir/Copiar vínculo" del Excel
   async resolverExcel(link) {
     const b64 = btoa(unescape(encodeURIComponent(link.trim()))).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
-    const it = await g(`/shares/u!${b64}/driveItem?$select=id,name,webUrl,parentReference`);
+    const it = await g(`/shares/u!${b64}/driveItem?$select=id,name,webUrl,parentReference`)
+      .catch(e => { throw new Error('No se pudo abrir el vínculo del Excel. Copialo de nuevo desde SharePoint (··· → Copiar vínculo). ' + e.message); });
     return { driveId: it.parentReference.driveId, itemId: it.id, nombre: it.name, webUrl: it.webUrl };
   },
 
   // Lee una tabla auxiliar completa (para las opciones de los campos adicionales)
   async leerTabla(excel, tabla) {
     return conSesion(excel, async h => {
-      const v = (await g(`${wb(excel)}/tables('${comillas(tabla)}')/range?$select=values`, { headers: h })).values;
+      const v = (await g(`${wb(excel)}/tables('${comillas(tabla)}')/range?$select=values`, { headers: h })
+        .catch(e => { throw new Error(`No se encontró la tabla "${tabla}" de un campo adicional en "${excel.nombre}". ${e.status === 404 ? '' : e.message}`); })).values;
       return { encabezados: v[0], filas: v.slice(1) };
     });
   },
@@ -433,9 +435,15 @@ export const api = {
   // Lee ítems (tabla de tarifas) y establecimientos (hoja y rango) desde el mismo Excel
   async leerCatalogo(excel, { tablaTarifas, hojaEstab, rangoEstab }) {
     return conSesion(excel, async h => {
-      const tar = (await g(`${wb(excel)}/tables('${comillas(tablaTarifas)}')/range?$select=values`, { headers: h })).values;
+      const enExcel = `en "${excel.nombre}"`;
+      const tar = (await g(`${wb(excel)}/tables('${comillas(tablaTarifas)}')/range?$select=values`, { headers: h })
+        .catch(e => { throw new Error(`No se encontró la tabla de ítems "${tablaTarifas}" ${enExcel}. ${e.status === 404 ? '' : e.message}`); })).values;
       // Establecimientos opcionales: sin hoja o rango, el técnico escribe el lugar a mano
-      const est = hojaEstab && rangoEstab ? await leerRango(excel, hojaEstab, rangoEstab, h) : [];
+      const est = hojaEstab && rangoEstab
+        ? await leerRango(excel, hojaEstab, rangoEstab, h).catch(e => {
+          throw new Error(`No se encontró la hoja "${hojaEstab}" ${enExcel}. Si este cliente no tiene lista de establecimientos, dejá la hoja vacía. ${e.status === 404 ? '' : e.message}`);
+        })
+        : [];
       return {
         items: tar.slice(1).filter(f => f[0] !== '' && f[1] !== '').map(f => ({ cod: f[0], servicio: String(f[1]).trim(), planilla: true })),
         // Se corta en la primera fila vacía: debajo suele haber otra tabla de la misma hoja

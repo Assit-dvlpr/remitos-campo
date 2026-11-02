@@ -215,6 +215,10 @@ export async function vistaConfiguracion(vista) {
 
     $('#btn-leer', sec).onclick = async e => {
       e.target.disabled = true;
+      // Lo leído antes no vale para el Excel nuevo: se limpia hasta que la lectura termine bien
+      catalogo = null;
+      $('#catalogo', sec).innerHTML = '<p class="ayuda">Leyendo el Excel…</p>';
+      $('#btn-guardar', sec).disabled = true;
       try {
         const link = $('#c-link', sec).value.trim();
         if (link) excel = await estado.api.resolverExcel(link);
@@ -238,7 +242,10 @@ export async function vistaConfiguracion(vista) {
         } else extras = [];
         pintarCatalogo();
         $('#btn-guardar', sec).disabled = false;
-      } catch (err) { aviso(err.message, 'error'); }
+      } catch (err) {
+        catalogo = null;
+        $('#catalogo', sec).innerHTML = `<div class="mensaje error">${esc(err.message)}</div>`;
+      }
       finally { e.target.disabled = false; }
     };
 
