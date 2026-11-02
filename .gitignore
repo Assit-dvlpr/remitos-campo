@@ -1,0 +1,11 @@
+# Nunca publicar datos de clientes: planillas, remitos ni fotos
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*.pdf
+*.jpg
+*.jpeg
+*.png
+!img/logo_alonger.jpg
+!img/alo.jpg
