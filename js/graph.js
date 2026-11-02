@@ -265,7 +265,7 @@ export const api = {
     const did = await driveId();
     try {
       const it = await g(`/drives/${did}/root:/${rutaArchivo(CONFIG.archivoConfig)}`);
-      const j = await (await descargar(did, it.id)).json();
+      const j = JSON.parse(await (await descargar(did, it.id)).text()); // descargar devuelve un Blob
       return j.clientes;
     } catch (e) {
       if (e.status === 404) throw Object.assign(new Error('Falta la configuración de clientes. Un administrador debe correr la Configuración.'), { codigo: 'sinConfigurar' });

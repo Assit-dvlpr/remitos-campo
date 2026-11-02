@@ -3,7 +3,7 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.3.2',
+  version: '1.3.3',
 
   // Microsoft Entra (registro de la app, tipo SPA)
   tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
