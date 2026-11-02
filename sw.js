@@ -1,6 +1,6 @@
 // Guarda la app en el celular para que abra sin señal. Solo archivos propios:
 // el login de Microsoft y SharePoint siempre van por la red.
-const VERSION = 'remitos-campo-1.3.3';
+const VERSION = 'remitos-campo-1.3.4';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'img/logo_alonger.jpg', 'img/alo.jpg',
@@ -20,11 +20,12 @@ self.addEventListener('activate', e => {
 });
 
 // Primero la red (para tomar actualizaciones); sin señal, lo guardado.
+// 'no-cache' obliga a consultar al servidor aunque el navegador tenga una copia reciente.
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })
       .then(r => {
         if (r.ok) { const copia = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copia)); }
         return r;

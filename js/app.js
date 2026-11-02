@@ -132,7 +132,15 @@ async function enviarPendientes() {
 async function iniciar() {
   $('#version').textContent = 'v' + CONFIG.version;
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(e => console.warn('Sin modo offline:', e));
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(reg => reg.update())
+      .catch(e => console.warn('Sin modo offline:', e));
+    // Cuando se instala una versión nueva, recargar una vez para usarla
+    const habiaControlador = !!navigator.serviceWorker.controller;
+    let recargado = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (habiaControlador && !recargado) { recargado = true; location.reload(); }
+    });
   }
 
   if (MODO_DEMO) {
