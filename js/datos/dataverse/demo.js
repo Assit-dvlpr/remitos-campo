@@ -52,9 +52,9 @@ const CATALOGOS = {
     { id: id(81), solicitudId: SOL.b, lineaId: LIN.sur, ordenInternaId: '', activo: true },
   ],
   ordenesInternas: [
-    { id: OI.a, numero: 'INT-0501', solicitudId: SOL.a, sectorId: SEC.elec, estadoValor: 101, estado: 'Programada', fechaProgramada: '2026-11-03', detalle: 'Medición PAT tanques', activo: true },
-    { id: OI.b, numero: 'INT-0502', solicitudId: SOL.b, sectorId: SEC.hys, estadoValor: 102, estado: 'Pendiente', fechaProgramada: '2026-11-05', detalle: '', activo: true },
-    { id: OI.c, numero: 'INT-0503', solicitudId: SOL.c, sectorId: SEC.elec, estadoValor: 103, estado: 'En curso', fechaProgramada: '', detalle: '', activo: true },
+    { id: OI.a, numero: 'INT-0501', solicitudId: SOL.a, sectorId: SEC.elec, estadoValor: 101, estado: 'Programada', fechaProgramada: '2026-11-03', detalle: 'Medición PAT tanques', creado: '2026-11-02T10:00:00Z', activo: true },
+    { id: OI.b, numero: 'INT-0502', solicitudId: SOL.b, sectorId: SEC.hys, estadoValor: 102, estado: 'Pendiente', fechaProgramada: '2026-11-05', detalle: '', creado: '2026-10-30T10:00:00Z', activo: true },
+    { id: OI.c, numero: 'INT-0503', solicitudId: SOL.c, sectorId: SEC.elec, estadoValor: 103, estado: 'En curso', fechaProgramada: '', detalle: '', creado: '2026-10-28T10:00:00Z', activo: true },
     { id: OI.cerrada, numero: 'INT-0400', solicitudId: SOL.a, sectorId: SEC.elec, estadoValor: 109, estado: 'Finalizada', fechaProgramada: '2026-10-01', detalle: '', activo: true },
   ],
   materialesStock: [

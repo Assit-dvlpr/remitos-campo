@@ -61,7 +61,7 @@ export const MAPEOS = {
     id: idDv(f.cr1d0_generalordenesinternasid), numero: f.cr1d0_numeroordeninterna || '', numeroALO: f.cr1d0_numeroalo || '',
     solicitudId: lookupId(f, 'cr1d0_solicitudgeneral'), sectorId: lookupId(f, 'cr1d0_sector'),
     estadoValor: f.cr1d0_estadooperativo ?? null, estado: formateado(f, 'cr1d0_estadooperativo', 'Pendiente'), fechaProgramada: String(f.cr1d0_fechaprogramada || '').slice(0, 10),
-    detalle: f.cr1d0_detalle || '', activo: activo(f),
+    detalle: f.cr1d0_detalle || '', creado: f.createdon || '', activo: activo(f),
   }),
   materialesStock: (f, m) => ({
     id: idDv(f.cr1d0_generalstockmaterialid), nombre: valor(f, 'cr1d0_nombredelmaterial', 'cr1d0_Nombredelmaterial', m?.PrimaryNameAttribute, 'cr1d0_nombre'),

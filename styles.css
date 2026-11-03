@@ -287,6 +287,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 /* ---------- Listas de remitos ---------- */
 .lista-remitos { display: flex; flex-direction: column; gap: 8px; }
+.lista-desplazable { overflow-y: auto; overscroll-behavior: contain; position: relative; padding-right: 2px; }
+.lista-desplazable > * { flex-shrink: 0; }
 .remito-fila {
   display: flex;
   gap: 12px;

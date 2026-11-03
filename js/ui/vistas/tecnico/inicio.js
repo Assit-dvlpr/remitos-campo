@@ -23,7 +23,8 @@ export function vistaInicio(vista, alElegir) {
         Al elegir una, la empresa, la línea y los servicios vienen de la solicitud.</p>
       <label for="f-buscar">Buscar</label>
       <input id="f-buscar" type="search" placeholder="N° de interna, solicitud, empresa o lugar" autocomplete="off">
-      <div id="ordenes" class="lista-remitos" style="margin-top:8px"></div>
+      <p class="ayuda" id="cuantas" style="margin:6px 0 0"></p>
+      <div id="ordenes" class="lista-remitos lista-desplazable" style="margin-top:6px"></div>
     </section>
     <section class="tarjeta">
       <h2>¿No está en el sistema?</h2>
@@ -32,8 +33,11 @@ export function vistaInicio(vista, alElegir) {
     </section>`;
 
   const pintar = texto => {
-    const lista = filtrarOrdenes(todas, texto).slice(0, 40);
-    $('#ordenes', vista).innerHTML = lista.length ? lista.map(o => `
+    const lista = filtrarOrdenes(todas, texto);
+    $('#cuantas', vista).textContent = lista.length > 4 ? `${lista.length} internas, las más nuevas primero. Deslizá la lista para ver más.` : '';
+    const cont = $('#ordenes', vista);
+    cont.scrollTop = 0;
+    cont.innerHTML = lista.length ? lista.map(o => `
       <button type="button" class="remito-fila boton" data-orden="${esc(o.id)}" style="justify-content:flex-start;text-align:left">
         <div class="datos">
           <div class="nro">${esc(o.numero || o.numeroALO || 'Interna')} · ${esc(o.empresa?.nombre || o.solicitud.empresa || '')}</div>
@@ -43,6 +47,9 @@ export function vistaInicio(vista, alElegir) {
         </div>
         <span class="estado pendiente">${esc(o.estado)}</span>
       </button>`).join('') : `<p class="vacio">${texto ? 'Ninguna interna coincide.' : 'No hay internas abiertas.'}</p>`;
+    // Se ven 4 y el resto se desliza dentro de la lista
+    const filas = [...cont.children];
+    cont.style.maxHeight = filas.length > 4 ? `${filas[4].offsetTop + 24}px` : ''; // asoma la quinta: se nota que hay más
   };
   pintar('');
 

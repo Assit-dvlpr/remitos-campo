@@ -54,7 +54,7 @@ export function lineasDeOrden(cat, orden) {
 }
 
 // Órdenes internas abiertas que el usuario puede asociar: las de su sector, o todas si verTodas (revisor/admin).
-// Vienen con su solicitud, empresa, líneas y servicios; las más próximas primero.
+// Vienen con su solicitud, empresa, líneas y servicios; las más nuevas primero.
 export function ordenesAbiertas(cat, { sectorId, verTodas = false, ref }) {
   return (cat.ordenesInternas || [])
     .filter(o => !internaCerrada(o, ref) && (verTodas || mismoId(o.sectorId, sectorId)))
@@ -69,7 +69,8 @@ export function ordenesAbiertas(cat, { sectorId, verTodas = false, ref }) {
       };
     })
     .filter(o => o.solicitud)
-    .sort((a, b) => (a.fechaProgramada || '9999').localeCompare(b.fechaProgramada || '9999') || String(b.numero).localeCompare(String(a.numero)));
+    // Las más nuevas primero (fecha de creación en Dataverse; sin fecha, por número)
+    .sort((a, b) => String(b.creado || '').localeCompare(String(a.creado || '')) || String(b.numero).localeCompare(String(a.numero), 'es', { numeric: true }));
 }
 
 // Búsqueda por número de interna, de solicitud, empresa o ubicación
