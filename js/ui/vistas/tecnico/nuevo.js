@@ -388,13 +388,23 @@ export async function vistaNuevo(vista) {
   // Intenta leer el N° de remito de la foto. Si el campo está vacío lo completa; si no, lo sugiere.
   async function leerNumero(pagina) {
     const caja = () => $('#ocr', vista);
-    if (caja()) caja().textContent = 'Leyendo el número del remito…';
+    const GIROS = [0, 90, 270];
+    // Barra de avance: preparar el lector (solo la primera vez) y cada intento de lectura
+    const mostrar = (intento, { fase, avance }) => {
+      const c = caja(); if (!c) return;
+      const texto = fase === 'preparando' ? 'Preparando el lector (solo la primera vez)…'
+        : intento === 0 ? 'Buscando el número del remito…' : `Probando la foto girada (${intento + 1} de ${GIROS.length})…`;
+      const pct = Math.round(avance * 100);
+      c.innerHTML = `<div class="ocr-progreso"><span>${texto}</span><b>${pct}%</b></div>
+        <div class="barra-ocr" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>`;
+    };
+    mostrar(0, { fase: 'leyendo', avance: 0 });
     let leido = null;
     try {
       const { leerNumeroRemito } = await import('../../../medios/ocr.js');
       // Si la foto quedó de costado, se prueba girada
-      for (const giro of [0, 90, 270]) {
-        leido = await leerNumeroRemito({ ...pagina, giro: ((pagina.giro || 0) + giro) % 360 });
+      for (const [i, giro] of GIROS.entries()) {
+        leido = await leerNumeroRemito({ ...pagina, giro: ((pagina.giro || 0) + giro) % 360 }, p => mostrar(i, p));
         if (leido) break;
       }
     } catch (e) { console.warn('OCR:', e); }

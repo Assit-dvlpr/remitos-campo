@@ -300,9 +300,13 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   position: absolute; top: 50px; right: 0; z-index: 5; display: flex; flex-direction: column; min-width: 220px;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); box-shadow: var(--sombra); overflow: hidden;
 }
+.menu-foto[hidden] { display: none; }
 .menu-foto .subir-foto { padding: 14px 16px; cursor: pointer; font-weight: 600; }
 .menu-foto .subir-foto + .subir-foto { border-top: 1px solid var(--borde); }
 #ocr:not(:empty) { margin-top: 4px; }
+#ocr .ocr-progreso { display: flex; justify-content: space-between; gap: 8px; }
+#ocr .barra-ocr { height: 6px; margin-top: 4px; border-radius: 3px; background: var(--borde); overflow: hidden; }
+#ocr .barra-ocr i { display: block; height: 100%; background: var(--marca); transition: width .2s; }
 #ocr button { min-height: 0; padding: 4px 10px; margin-left: 4px; }
 .subir-foto input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
