@@ -34,6 +34,25 @@ const nombreTecnico = cli => nombreEnPlanilla(cli, estado.usuario);
 // Botón Atrás del celular dentro de "Nuevo remito": lo maneja la pantalla abierta
 // (si el Atrás cambia de pestaña, lo resuelve la navegación por hash y acá no se hace nada)
 let alVolverAtras = null;
+
+// Marca de "cámara abierta": algunos celulares recargan la página al volver de la cámara y así no se pierde lo cargado
+const MARCA_CAMARA = 'remito-camara-abierta';
+const leerMarca = () => { try { return !!sessionStorage.getItem(MARCA_CAMARA); } catch { return false; } };
+const marcarCamara = () => { try { sessionStorage.setItem(MARCA_CAMARA, '1'); } catch { /* sin almacenamiento */ } };
+const borrarMarca = () => { try { sessionStorage.removeItem(MARCA_CAMARA); } catch { /* sin almacenamiento */ } };
+// Salir de "Nuevo remito" con cambios sin enviar pide confirmación (pestañas, recargar o cerrar la app)
+let hayCambios = () => false;
+const enNuevo = () => (location.hash.slice(1).split('/')[0] || 'nuevo') === 'nuevo';
+const confirmarSalida = () => !(enNuevo() && hayCambios())
+  || confirm('Tenés un remito sin enviar. Si salís se pierde lo cargado. ¿Salir igual?');
+document.addEventListener('click', e => {
+  const a = e.target.closest?.('#pestanas a');
+  if (!a || a.getAttribute('href') === (location.hash || '#nuevo')) return;
+  if (!confirmarSalida()) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+window.addEventListener('beforeunload', e => {
+  if (enNuevo() && hayCambios() && !leerMarca()) { e.preventDefault(); e.returnValue = ''; }
+});
 let hashActual = location.hash;
 window.addEventListener('popstate', e => { if (location.hash === hashActual) alVolverAtras?.(e); });
 window.addEventListener('hashchange', () => { hashActual = location.hash; });
@@ -169,8 +188,16 @@ export async function vistaNuevo(vista) {
     vista.innerHTML = `<div class="mensaje error">Todavía no hay clientes configurados. ${esc(estado.errorClientes || '')}</div>`;
     return;
   }
-  let b = (await borrador.leer().catch(() => null)) || nuevoBorrador();
+  // Cada vez que se entra a "Nuevo remito" se arranca de cero (pantalla para elegir la interna).
+  // Solo se recupera lo cargado si el celular recargó la página al abrir la cámara o la galería.
+  let b, tocado = false;
   if (estado.corregir) { b = estado.corregir; estado.corregir = null; }
+  else {
+    const volvioDeCamara = leerMarca();
+    borrarMarca();
+    b = volvioDeCamara ? await borrador.leer().catch(() => null) : null;
+    if (!b) { await borrador.borrar().catch(() => {}); b = nuevoBorrador(); } else tocado = true;
+  }
   b.matServ ??= {};
   b.lineaServ ??= {};
   const conSistema = sistemaActivo() && estado.sistema;
@@ -179,20 +206,22 @@ export async function vistaNuevo(vista) {
   if (conSistema && b.itemId && !b.sistema) aplicarOrigen(b, { tipo: 'nuevo' });
 
   let tGuardar;
-  const guardarBorrador = () => { clearTimeout(tGuardar); tGuardar = setTimeout(() => borrador.guardar(b).catch(() => {}), 300); };
+  // Cada cambio del usuario pasa por acá: marca el remito como modificado
+  hayCambios = () => tocado;
+  const guardarBorrador = (cambio = true) => { if (cambio) tocado = true; clearTimeout(tGuardar); tGuardar = setTimeout(() => borrador.guardar(b).catch(() => {}), 300); };
 
   // Pasos con sistema: 'elegir' (interna o nuevo) -> 'internas' -> formulario. Cada paso queda en el historial,
   // así el botón Atrás del celular (y el "← Volver" de la pantalla) vuelve al paso anterior.
   let paso = b.sistema ? 'form' : 'elegir';
-  const avanzar = p => { paso = p; history.pushState({ remitoPaso: p }, ''); guardarBorrador(); pintar(); window.scrollTo(0, 0); };
+  const avanzar = p => { paso = p; history.pushState({ remitoPaso: p }, ''); guardarBorrador(false); pintar(); window.scrollTo(0, 0); };
   const volverA = p => {
     // Al dejar el formulario se suelta la interna (y lo que dependía de ella); el resto de lo cargado se conserva
-    if (p !== 'form' && b.sistema && !b.itemId) { b.sistema = null; b.cant = {}; b.matServ = {}; b.lineaServ = {}; guardarBorrador(); }
+    if (p !== 'form' && b.sistema && !b.itemId) { b.sistema = null; b.cant = {}; b.matServ = {}; b.lineaServ = {}; guardarBorrador(false); }
     paso = p; pintar(); window.scrollTo(0, 0);
   };
   const anterior = () => (b.sistema?.tipo === 'orden' ? 'internas' : 'elegir');
   const volver = () => {
-    if (b.itemId) { ir('mis'); return; }
+    if (b.itemId) { if (confirmarSalida()) { tocado = false; ir('mis'); } return; }
     if (history.state?.remitoPaso) history.back();
     else { history.replaceState({ remitoPaso: anterior() }, ''); volverA(anterior()); }
   };
@@ -489,14 +518,18 @@ export async function vistaNuevo(vista) {
     const menu = $('#menu-foto', vista);
     on('#btn-foto', 'click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; e.currentTarget.setAttribute('aria-expanded', String(!menu.hidden)); });
     vista.addEventListener('click', e => { if (menu && !menu.hidden && !e.target.closest('#menu-foto, #btn-foto')) menu.hidden = true; });
-    on('#f-camara', 'change', e => { menu.hidden = true; agregarFotos([...e.target.files]); });
-    on('#f-galeria', 'change', e => { menu.hidden = true; agregarFotos([...e.target.files]); });
+    for (const id of ['#f-camara', '#f-galeria']) {
+      on(id, 'click', () => { clearTimeout(tGuardar); borrador.guardar(b).catch(() => {}); marcarCamara(); });
+      on(id, 'cancel', borrarMarca);
+      on(id, 'change', async e => { menu.hidden = true; await agregarFotos([...e.target.files]); borrarMarca(); });
+    }
     on('#btn-enviar', 'click', enviar);
     on('#btn-descartar', 'click', async () => {
       if (!confirm('¿Descartar este remito? Se borra lo cargado.')) return;
       clearTimeout(tGuardar);
       await borrador.borrar();
       b = nuevoBorrador();
+      tocado = false;
       paso = 'elegir';
       pintar();
     });
@@ -585,6 +618,7 @@ export async function vistaNuevo(vista) {
       recordar('ultimoPv', b.pv);
       aviso(navigator.onLine ? 'Remito guardado. Enviando…' : 'Sin señal: queda guardado y se envía solo al volver la conexión.', 'ok');
       refrescarPestanas();
+      tocado = false;
       ir('mis');
       await procesarCola(estado.api, refrescarPestanas);
       if (location.hash === '#mis') vistaMisRemitos($('#vista'));
