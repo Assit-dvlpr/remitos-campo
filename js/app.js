@@ -11,6 +11,21 @@ import { mostrar, refrescarPestanas } from './ui/navegacion.js';
 
 const enviarPendientes = () => procesarCola(estado.api, refrescarPestanas);
 
+// Avisos amarillos de arriba: cada uno con una cruz; el que se cierra no vuelve a aparecer en este celular
+const ocultos = () => recordar('avisos-ocultos') || [];
+function avisoArriba(clave, texto) {
+  if (ocultos().includes(clave)) return;
+  $('#banner').insertAdjacentHTML('beforeend', `<div class="banner" data-aviso="${esc(clave)}"><span>${esc(texto)}</span>
+    <button type="button" class="cerrar-aviso" aria-label="Ocultar aviso" title="Ocultar">✕</button></div>`);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.cerrar-aviso');
+  if (!b) return;
+  const aviso = b.closest('[data-aviso]');
+  recordar('avisos-ocultos', [...new Set([...ocultos(), aviso.dataset.aviso])]);
+  aviso.remove();
+});
+
 function registrarServiceWorker() {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
@@ -27,7 +42,7 @@ function registrarServiceWorker() {
 // Devuelve la fuente de datos, o null si hay que mostrar el login
 async function conectarDatos() {
   if (MODO_DEMO) {
-    $('#banner').innerHTML = '<div class="banner">Modo demostración: los datos quedan en este navegador y la planilla es simulada.</div>';
+    avisoArriba('demo', 'Modo demostración: los datos quedan en este navegador y la planilla es simulada.');
     return (await import('./datos/demo.js')).api;
   }
   const auth = await import('./auth/auth.js');
@@ -43,7 +58,7 @@ async function conectarDatos() {
   estado.salir = auth.salir;
   if (MODO_PRUEBA_DV) {
     // SharePoint y Excel simulados; el usuario es la cuenta real (para buscarlo en Dataverse), con todos los permisos
-    $('#banner').innerHTML = '<div class="banner">Prueba de Dataverse: catálogos y tabla intermedia reales; SharePoint y los Excel simulados en este navegador.</div>';
+    avisoArriba('prueba', 'Prueba de Dataverse: catálogos y tabla intermedia reales; SharePoint y los Excel simulados en este navegador.');
     const { api: demo, CLIENTES_DEMO } = await import('./datos/demo.js');
     // El cliente demo no trae vínculos con el sistema: se eligen en Configuración con los catálogos reales
     delete CLIENTES_DEMO.demo.empresaId;
@@ -83,7 +98,7 @@ async function iniciar() {
       // En la prueba, sin referencias se entra igual para elegirlas en Configuración → Sistema
       if (MODO_PRUEBA_DV && e.codigo === 'REFERENCIAS') {
         estado.sistema = null;
-        $('#banner').insertAdjacentHTML('beforeend', `<div class="banner">${esc(e.message)} Elegilas en Configuración → Sistema.</div>`);
+        avisoArriba('referencias', `${e.message} Elegilas en Configuración → Sistema.`);
       } else {
         $('#vista').innerHTML = `<div class="mensaje error">${esc(e.message)}</div>` +
           (estado.salir ? '<div class="acciones"><button id="btn-salir-error">Salir / cambiar de cuenta</button></div>' : '');
@@ -91,8 +106,7 @@ async function iniciar() {
         return;
       }
     }
-    if (estado.sistema?.faltan?.length) $('#banner').insertAdjacentHTML('beforeend',
-      `<div class="banner">Sin referencias (${esc(estado.sistema.faltan.join(', '))}): se muestran todas las internas. Es opcional; se eligen en Configuración → Sistema.</div>`);
+    if (estado.sistema?.faltan?.length) avisoArriba('referencias', `Sin referencias (${estado.sistema.faltan.join(', ')}): se muestran todas las internas. Es opcional; se eligen en Configuración → Sistema.`);
     if (estado.sistema?.catalogos.avisos?.length) console.warn('Dataverse:', estado.sistema.catalogos.avisos);
   }
   try {

@@ -35,8 +35,8 @@ const CATALOGOS = {
     { id: SERV.dmont, codigo: '21', codigoInterno: 'DMONT', nombre: 'Desmontaje de puesta a tierra', sectorId: SEC.elec, recuento: null, activo: true },
   ],
   solicitudes: [
-    { id: SOL.a, numero: 'GEN-2026-0101', numeroExterno: 'OC 4500123', empresaId: E.demo, empresa: 'Cliente Demo', ubicacion: 'Planta Demo Norte', estado: 'En curso', activo: true },
-    { id: SOL.b, numero: 'GEN-2026-0102', numeroExterno: '', empresaId: E.demo, empresa: 'Cliente Demo', ubicacion: 'Estación Demo Este', estado: 'En curso', activo: true },
+    { id: SOL.a, numero: 'GEN-2026-0101', numeroExterno: 'OC 4500123', empresaId: E.demo, empresa: 'Cliente Demo', ubicacion: 'Planta Demo Norte', locacion: 'Locación LDN-12', estado: 'En curso', activo: true },
+    { id: SOL.b, numero: 'GEN-2026-0102', numeroExterno: '', empresaId: E.demo, empresa: 'Cliente Demo', ubicacion: 'Estación Demo Este', locacion: 'Locación EDE-3', estado: 'En curso', activo: true },
     { id: SOL.c, numero: 'GEN-2026-0103', numeroExterno: '', empresaId: E.otra, empresa: 'Otra Empresa', ubicacion: 'Base Otra', estado: 'Nueva', activo: true },
   ],
   solicitudServicios: [

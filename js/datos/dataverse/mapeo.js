@@ -47,7 +47,7 @@ export const MAPEOS = {
   solicitudes: f => ({
     id: idDv(f.cr1d0_generalsolicitudid), numero: f.cr1d0_nrosolicitudsistema || '', numeroExterno: f.cr1d0_nrosolicitudexterno || '',
     empresaId: lookupId(f, 'cr1d0_clienteempresaid'), empresa: lookupNombre(f, 'cr1d0_clienteempresaid'),
-    ubicacion: f.cr1d0_ubicacion || '', estado: formateado(f, 'cr1d0_estadogeneral'), activo: activo(f),
+    ubicacion: f.cr1d0_ubicacion || '', locacion: f.cr1d0_locacion || '', estado: formateado(f, 'cr1d0_estadogeneral'), activo: activo(f),
   }),
   solicitudServicios: f => ({
     id: idDv(f.cr1d0_generalsolicitudserviciosid), solicitudId: lookupId(f, 'cr1d0_solicitud'), servicioId: lookupId(f, 'cr1d0_servicio'),
@@ -61,7 +61,7 @@ export const MAPEOS = {
     id: idDv(f.cr1d0_generalordenesinternasid), numero: f.cr1d0_numeroordeninterna || '', numeroALO: f.cr1d0_numeroalo || '',
     solicitudId: lookupId(f, 'cr1d0_solicitudgeneral'), sectorId: lookupId(f, 'cr1d0_sector'),
     estadoValor: f.cr1d0_estadooperativo ?? null, estado: formateado(f, 'cr1d0_estadooperativo', 'Pendiente'), fechaProgramada: String(f.cr1d0_fechaprogramada || '').slice(0, 10),
-    detalle: f.cr1d0_detalle || '', creado: f.createdon || '', activo: activo(f),
+    detalle: f.cr1d0_detalle || '', locacion: f.cr1d0_locacion || '', creado: f.createdon || '', activo: activo(f),
   }),
   materialesStock: (f, m) => ({
     id: idDv(f.cr1d0_generalstockmaterialid), nombre: valor(f, 'cr1d0_nombredelmaterial', 'cr1d0_Nombredelmaterial', m?.PrimaryNameAttribute, 'cr1d0_nombre'),

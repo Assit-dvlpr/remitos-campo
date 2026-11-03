@@ -77,7 +77,7 @@ export function ordenesAbiertas(cat, { sectorId, verTodas = false, ref }) {
 export function filtrarOrdenes(ordenes, texto) {
   const t = etiqueta(texto);
   if (!t) return ordenes;
-  return ordenes.filter(o => [o.numero, o.numeroALO, o.solicitud?.numero, o.solicitud?.numeroExterno, o.empresa?.nombre, o.solicitud?.ubicacion]
+  return ordenes.filter(o => [o.numero, o.numeroALO, o.solicitud?.numero, o.solicitud?.numeroExterno, o.empresa?.nombre, o.solicitud?.ubicacion, o.solicitud?.locacion]
     .some(v => etiqueta(v).includes(t)));
 }
 

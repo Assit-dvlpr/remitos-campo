@@ -17,7 +17,7 @@ import { ir, refrescarPestanas } from '../../navegacion.js';
 import { htmlServicios, conectarServicios } from '../../componentes/servicios.js';
 import { htmlSelectExtra, htmlAutomaticos } from '../../componentes/extras.js';
 import { vistaMisRemitos } from './mis-remitos.js';
-import { vistaInicio } from './inicio.js';
+import { vistaElegirOrigen, vistaInternas } from './inicio.js';
 import { sistemaActivo } from '../../../datos/sistema.js';
 import { mismoId } from '../../../nucleo/ids.js';
 import {
@@ -30,6 +30,13 @@ import { TODAS_LAS_LINEAS } from '../../../dominio/intermedia.js';
 import { esKm } from '../../../dominio/catalogo.js';
 
 const nombreTecnico = cli => nombreEnPlanilla(cli, estado.usuario);
+
+// Botón Atrás del celular dentro de "Nuevo remito": lo maneja la pantalla abierta
+// (si el Atrás cambia de pestaña, lo resuelve la navegación por hash y acá no se hace nada)
+let alVolverAtras = null;
+let hashActual = location.hash;
+window.addEventListener('popstate', e => { if (location.hash === hashActual) alVolverAtras?.(e); });
+window.addEventListener('hashchange', () => { hashActual = location.hash; });
 
 function nuevoBorrador() {
   const claves = Object.keys(estado.clientes || {});
@@ -124,7 +131,6 @@ function htmlSistema(b) {
   const empresas = s.tipo === 'orden' ? [buscarPorId(cat.empresas, s.empresaId)].filter(Boolean) : empresasConLineas(cat);
   if (s.tipo === 'nuevo') cabecera = `<p class="ayuda" style="margin:0">Remito nuevo, como hasta ahora. Empresa, línea y operadora son opcionales.</p>`;
   return `${cabecera}
-    ${b.itemId ? '' : '<div class="acciones" style="margin-top:4px"><button type="button" id="btn-origen">Cambiar interna / remito nuevo</button></div>'}
     <label for="f-empresa">Empresa</label>
     <select id="f-empresa" ${s.tipo === 'orden' ? 'disabled' : ''}><option value="">Elegir…</option>${opt(empresas, s.empresaId)}</select>
     ${variasLineas(b) ? `<span class="etiqueta">Líneas de la interna</span>
@@ -173,10 +179,34 @@ export async function vistaNuevo(vista) {
   let tGuardar;
   const guardarBorrador = () => { clearTimeout(tGuardar); tGuardar = setTimeout(() => borrador.guardar(b).catch(() => {}), 300); };
 
+  // Pasos con sistema: 'elegir' (interna o nuevo) -> 'internas' -> formulario. Cada paso queda en el historial,
+  // así el botón Atrás del celular (y el "← Volver" de la pantalla) vuelve al paso anterior.
+  let paso = b.sistema ? 'form' : 'elegir';
+  const avanzar = p => { paso = p; history.pushState({ remitoPaso: p }, ''); guardarBorrador(); pintar(); window.scrollTo(0, 0); };
+  const volverA = p => {
+    // Al dejar el formulario se suelta la interna (y lo que dependía de ella); el resto de lo cargado se conserva
+    if (p !== 'form' && b.sistema && !b.itemId) { b.sistema = null; b.cant = {}; b.matServ = {}; b.lineaServ = {}; guardarBorrador(); }
+    paso = p; pintar(); window.scrollTo(0, 0);
+  };
+  const anterior = () => (b.sistema?.tipo === 'orden' ? 'internas' : 'elegir');
+  const volver = () => {
+    if (b.itemId) { ir('mis'); return; }
+    if (history.state?.remitoPaso) history.back();
+    else { history.replaceState({ remitoPaso: anterior() }, ''); volverA(anterior()); }
+  };
+  alVolverAtras = e => {
+    const r = location.hash.slice(1).split('/')[0];
+    if (r && r !== 'nuevo') return;
+    volverA(e.state?.remitoPaso || 'elegir');
+  };
+
   function pintar() {
-    // Con sistema principal, primero se elige si es de una interna existente o un remito nuevo
     if (conSistema && !b.sistema) {
-      vistaInicio(vista, origen => { aplicarOrigen(b, origen); guardarBorrador(); pintar(); window.scrollTo(0, 0); });
+      if (paso === 'internas') {
+        vistaInternas(vista, { alElegir: orden => { aplicarOrigen(b, { tipo: 'orden', orden }); avanzar('form'); }, alVolver: volver });
+      } else {
+        vistaElegirOrigen(vista, { alInterna: () => avanzar('internas'), alNuevo: () => { aplicarOrigen(b, { tipo: 'nuevo' }); avanzar('form'); } });
+      }
       return;
     }
     const cli = clienteActual(b);
@@ -188,6 +218,7 @@ export async function vistaNuevo(vista) {
     for (const d of extrasTecnico) if (!b.extras[d.campo] && d.opciones?.length === 1) b.extras[d.campo] = d.opciones[0];
     const autos = completarAutomaticos(cli.extras, b.extras);
     vista.innerHTML = `
+      ${conSistema || b.itemId ? '<button type="button" class="volver" id="btn-volver">← Volver</button>' : ''}
       <h1 class="titulo">${b.itemId ? 'Corregir remito' : 'Nuevo remito'}</h1>
       ${b.comentario ? `<div class="mensaje alerta"><b>Observación de la revisión:</b> ${esc(b.comentario)}</div>` : ''}
       ${conSistema ? `<section class="tarjeta" id="sec-sistema"><h2>Trabajo</h2>${htmlSistema(b)}</section>` : ''}
@@ -353,6 +384,7 @@ export async function vistaNuevo(vista) {
       if (!b.tecnicoEditado) b.tecnico = nombreTecnico(estado.clientes[b.cliente]);
       guardarBorrador(); pintar();
     });
+    on('#btn-volver', 'click', volver);
     on('#f-acomp', 'input', e => { b.acompanante = e.target.value; guardarBorrador(); });
     // Con sistema el acompañante se elige por GUID; para la planilla se usa su apellido
     on('#f-acomp-id', 'change', e => {
@@ -385,7 +417,7 @@ export async function vistaNuevo(vista) {
       pintarPorServicio(false);
     });
     if (conSistema) {
-      on('#btn-origen', 'click', () => { b.sistema = null; b.cant = {}; guardarBorrador(); pintar(); });
+
       on('#f-empresa', 'change', e => {
         Object.assign(b.sistema, { empresaId: e.target.value, lineaId: '', operadoraId: '' });
         b.matServ = {};
@@ -410,6 +442,7 @@ export async function vistaNuevo(vista) {
       clearTimeout(tGuardar);
       await borrador.borrar();
       b = nuevoBorrador();
+      paso = 'elegir';
       pintar();
     });
   }
