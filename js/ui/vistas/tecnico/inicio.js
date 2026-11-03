@@ -15,23 +15,29 @@ const abreviaturas = o => [...new Set((o.servicios || []).map(s => s.servicio).f
   .map(s => String(s.codigoInterno || s.codigo || s.nombre).trim().toUpperCase()))].join(' · ');
 
 // Paso 1: de una interna o nuevo
-export function vistaElegirOrigen(vista, { alInterna, alNuevo }) {
-  const n = internas().length;
+export function vistaElegirOrigen(vista, { alInterna, alNuevo, sinSistema = null, alReintentar }) {
+  // sinSistema = motivo por el que no se pudieron leer las internas (se ofrece solo el remito nuevo y reintentar)
+  const n = sinSistema === null ? internas().length : 0;
   vista.innerHTML = `
     <h1 class="titulo">Nuevo remito</h1>
-    ${estado.sistema.sinSenal ? '<div class="mensaje alerta">Sin señal: se usan las internas guardadas en el celular.</div>' : ''}
+    ${estado.sistema?.sinSenal ? '<div class="mensaje alerta">Sin señal: se usan las internas guardadas en el celular.</div>' : ''}
     <div class="opciones-origen">
-      <button type="button" class="opcion-origen primario" id="btn-interna">
+      ${sinSistema === null ? `<button type="button" class="opcion-origen primario" id="btn-interna">
         <b>De una orden interna</b>
         <span>${n ? `${n} abierta${n === 1 ? '' : 's'} ${veTodas() ? 'en todos los sectores' : `de ${esc(estado.sistema.sector?.nombre || 'tu sector')}`}` : 'No hay internas abiertas'}.
           La empresa, las líneas y los servicios vienen de la interna.</span>
-      </button>
+      </button>` : `<div class="opcion-origen no-disponible">
+        <b>De una orden interna</b>
+        <span>No se pudieron leer las internas. ${esc(sinSistema)}</span>
+        <button type="button" id="btn-reintentar-sistema">Reintentar</button>
+      </div>`}
       <button type="button" class="opcion-origen" id="btn-nuevo">
         <b>Remito nuevo</b>
         <span>No está en el sistema: se carga como hasta ahora.</span>
       </button>
     </div>`;
-  $('#btn-interna', vista).addEventListener('click', alInterna);
+  $('#btn-interna', vista)?.addEventListener('click', alInterna);
+  $('#btn-reintentar-sistema', vista)?.addEventListener('click', alReintentar);
   $('#btn-nuevo', vista).addEventListener('click', alNuevo);
 }
 

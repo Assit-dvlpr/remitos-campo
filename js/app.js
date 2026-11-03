@@ -55,6 +55,8 @@ async function conectarDatos() {
     $('#btn-ingresar').onclick = () => auth.ingresar();
     return null;
   }
+  // Recién ingresado: se arranca en "Nuevo remito" (elegir interna o remito nuevo), no donde quedó la sesión anterior
+  if (auth.recienIngresado()) history.replaceState(null, '', location.pathname + location.search + '#nuevo');
   estado.salir = auth.salir;
   if (MODO_PRUEBA_DV) {
     // SharePoint y Excel simulados; el usuario es la cuenta real (para buscarlo en Dataverse), con todos los permisos

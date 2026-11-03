@@ -5,6 +5,7 @@ import { CONFIG } from '../nucleo/config.js';
 
 let app = null;
 let cuenta = null;
+let recien = false; // true si esta carga es la vuelta del login de Microsoft
 
 function redirectUri() {
   return location.origin + location.pathname.replace(/index\.html$/, '');
@@ -21,6 +22,7 @@ export async function iniciarAuth() {
   });
   await app.initialize();
   const r = await app.handleRedirectPromise();
+  recien = !!r?.account;
   cuenta = r?.account || app.getAllAccounts()[0] || null;
   if (cuenta) app.setActiveAccount(cuenta);
   return cuenta;
@@ -48,3 +50,4 @@ export async function obtenerToken(scopes = CONFIG.scopes) {
 }
 
 export const cuentaActual = () => cuenta;
+export const recienIngresado = () => recien;

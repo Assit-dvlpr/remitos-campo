@@ -212,10 +212,13 @@ export async function vistaNuevo(vista) {
 
   // Pasos con sistema: 'elegir' (interna o nuevo) -> 'internas' -> formulario. Cada paso queda en el historial,
   // así el botón Atrás del celular (y el "← Volver" de la pantalla) vuelve al paso anterior.
-  let paso = b.sistema ? 'form' : 'elegir';
+  // Sin Dataverse (falló la lectura) igual se pasa por la pantalla inicial: queda solo "Remito nuevo"
+  const conInicio = sistemaActivo() && !b.itemId;
+  let paso = b.sistema || b.origenElegido ? 'form' : 'elegir';
   const avanzar = p => { paso = p; history.pushState({ remitoPaso: p }, ''); guardarBorrador(false); pintar(); window.scrollTo(0, 0); };
   const volverA = p => {
     // Al dejar el formulario se suelta la interna (y lo que dependía de ella); el resto de lo cargado se conserva
+    if (p !== 'form' && !b.itemId) b.origenElegido = false;
     if (p !== 'form' && b.sistema && !b.itemId) { b.sistema = null; b.cant = {}; b.matServ = {}; b.lineaServ = {}; guardarBorrador(false); }
     paso = p; pintar(); window.scrollTo(0, 0);
   };
@@ -240,6 +243,14 @@ export async function vistaNuevo(vista) {
       }
       return;
     }
+    if (!conSistema && conInicio && !b.origenElegido) {
+      vistaElegirOrigen(vista, {
+        sinSistema: motivoSinSistema || 'No se cargaron los datos del sistema.',
+        alReintentar: () => location.reload(),
+        alNuevo: () => { b.origenElegido = true; avanzar('form'); },
+      });
+      return;
+    }
     const cli = clienteActual(b);
     const est = buscarEstablecimiento(cli, b.establecimiento);
     const claves = cli.sistema ? [] : Object.keys(estado.clientes);
@@ -249,7 +260,7 @@ export async function vistaNuevo(vista) {
     for (const d of extrasTecnico) if (!b.extras[d.campo] && d.opciones?.length === 1) b.extras[d.campo] = d.opciones[0];
     const autos = completarAutomaticos(cli.extras, b.extras);
     vista.innerHTML = `
-      ${conSistema || b.itemId ? '<button type="button" class="volver" id="btn-volver">← Volver</button>' : ''}
+      ${conInicio || b.itemId ? '<button type="button" class="volver" id="btn-volver">← Volver</button>' : ''}
       ${!conSistema && sistemaActivo() && motivoSinSistema ? `<div class="mensaje alerta">No se pudo usar el sistema, así que se carga como hasta ahora. ${esc(motivoSinSistema)}
         <div class="acciones"><button type="button" id="btn-reintentar">Reintentar</button></div></div>` : ''}
       <h1 class="titulo">${b.itemId ? 'Corregir remito' : 'Nuevo remito'}</h1>
