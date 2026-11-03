@@ -50,7 +50,9 @@ test('sector eléctrico, usuario habilitado e interna cerrada se deciden por GUI
   assert.ok(internaCerrada({ estadoValor: 109, estado: 'En curso' }, ref));
   assert.ok(!internaCerrada({ estadoValor: 101, estado: 'Finalizada' }, ref));
   assert.deepEqual(referenciasFaltantes(ref), []);
-  assert.equal(referenciasFaltantes({}).length, 3);
+  assert.deepEqual(referenciasFaltantes({}), ['estados cerrados de la interna']);
+  // Sin lista de estados de usuario no se filtra
+  assert.ok(usuarioHabilitado({ estadoValor: 2 }, { usuarioEstadosHabilitados: [] }));
 });
 
 test('órdenes abiertas del sector, con solicitud, empresa, líneas y servicios', () => {

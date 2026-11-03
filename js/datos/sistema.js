@@ -48,8 +48,7 @@ export async function cargarSistema(email) {
   }
   // Sin alta en el sistema principal: funcionamiento de siempre (algunos sectores trabajan así)
   if (!usuario) return null;
-  const sinFiltroUsuario = MODO_PRUEBA_DV && !ref.usuarioEstadosHabilitados?.length;
-  if (!sinFiltroUsuario && !usuarioHabilitado(usuario, ref)) throw new Error(`Tu usuario del sistema principal está "${usuario.estado}". Pedile al administrador que lo habilite.`);
+  if (!usuarioHabilitado(usuario, ref)) throw new Error(`Tu usuario del sistema principal está "${usuario.estado}". Pedile al administrador que lo habilite.`);
   const sector = buscarPorId(catalogos.sectores, usuario.sectorId);
   return { usuario, sector, electrico: esSectorElectrico(usuario.sectorId, ref), catalogos, ref, sinSenal, faltan };
 }

@@ -61,12 +61,18 @@ export function vistaInternas(vista, { alElegir, alVolver }) {
     ajustarAlto();
   };
   // La lista ocupa hasta el final de la pantalla y se desliza adentro (la página no se mueve)
-  const ajustarAlto = () => {
+  // Se mide después de que la pantalla terminó de acomodarse (avisos, barra del navegador) y otra vez al cambiar el alto
+  const medir = () => {
     const cont = $('#ordenes', vista);
-    if (!cont?.isConnected) { removeEventListener('resize', ajustarAlto); return; }
-    cont.style.maxHeight = `${Math.max(220, innerHeight - cont.getBoundingClientRect().top - 12)}px`;
+    if (!cont?.isConnected) { removeEventListener('resize', ajustarAlto); visualViewport?.removeEventListener('resize', ajustarAlto); return; }
+    const alto = window.visualViewport?.height || innerHeight;
+    const arriba = cont.getBoundingClientRect().top + scrollY;
+    cont.style.maxHeight = `${Math.max(alto * 0.5, alto - arriba - 12)}px`;
   };
+  const ajustarAlto = () => requestAnimationFrame(() => requestAnimationFrame(medir));
   addEventListener('resize', ajustarAlto);
+  visualViewport?.addEventListener('resize', ajustarAlto);
+  setTimeout(ajustarAlto, 400);
   pintar('');
 
   $('#btn-volver', vista).addEventListener('click', alVolver);

@@ -3,7 +3,7 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.5.8',
+  version: '1.5.9',
 
   // Microsoft Entra (registro de la app, tipo SPA)
   tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
@@ -31,9 +31,9 @@ export const CONFIG = {
     // Las decisiones se toman por GUID o por el valor numérico de cada opción, nunca por el texto.
     // Se completan una vez, leyendo el entorno (ver la especificación). Vacío = la app no arranca con Dataverse.
     referencias: {
-      sectorElectricoId: '',             // GUID del sector Seguridad eléctrica (cr1d0_generalsectores)
-      internaEstadosCerrados: [],        // valores de cr1d0_estadooperativo que no admiten remitos (Finalizada, Cancelada…)
-      usuarioEstadosHabilitados: [],     // valores de cr1d0_estado del usuario que dejan entrar (Activo)
+      sectorElectricoId: '',             // opcional: GUID del sector Seguridad eléctrica
+      internaEstadosCerrados: [159370004, 159370005], // cr1d0_estadooperativo que no admiten remitos: Finalizado, Cancelada
+      usuarioEstadosHabilitados: [],     // opcional: valores de cr1d0_estado del usuario que dejan entrar (vacío = no filtra)
     },
     // Carpeta común de remitos de ALO Manager: ahí va la foto del remito aprobado, con el mismo formato de nombre
     carpetaRemitos: { host: 'alongercomar.sharepoint.com', sitio: '/sites/ALOManager', biblioteca: '/sites/ALOManager/Documentos compartidos', carpeta: 'Remitos' },

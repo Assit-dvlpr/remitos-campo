@@ -18,14 +18,15 @@ export const internaCerrada = (orden, ref) => valorEn(ref?.internaEstadosCerrado
 export const esSectorElectrico = (sectorId, ref) => mismoId(sectorId, ref?.sectorElectricoId);
 
 // Solo entran los usuarios cuyo estado está en la lista de habilitados (un estado nuevo no deja entrar)
-export const usuarioHabilitado = (u, ref) => Boolean(u) && valorEn(ref?.usuarioEstadosHabilitados, u.estadoValor);
+// Sin lista configurada no se filtra (el acceso ya lo controlan Entra y los roles de Dataverse)
+export const usuarioHabilitado = (u, ref) => Boolean(u) && (!ref?.usuarioEstadosHabilitados?.length || valorEn(ref.usuarioEstadosHabilitados, u.estadoValor));
 
 // Referencias que faltan configurar (sin ellas no se puede decidir nada por ID)
 export function referenciasFaltantes(ref) {
   const f = [];
-  if (!ref?.sectorElectricoId) f.push('sector eléctrico');
+  // El sector eléctrico y los estados de usuario ya no son obligatorios: los materiales van por servicio
+  // y sin lista de estados de usuario no se filtra. Solo falta saber qué estados de la interna están cerrados.
   if (!ref?.internaEstadosCerrados?.length) f.push('estados cerrados de la interna');
-  if (!ref?.usuarioEstadosHabilitados?.length) f.push('estados habilitados del usuario');
   return f;
 }
 
