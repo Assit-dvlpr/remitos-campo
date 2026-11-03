@@ -378,8 +378,6 @@ export async function vistaNuevo(vista) {
     cont.innerHTML = `
       ${lineas.length ? htmlPestanasLineas(lineas.map(id => ({ id, nombre: nombreDeLinea(id) })), activa, b.cantLinea) : ''}
       ${faltaLinea ? '<p class="mensaje alerta" style="margin:0 0 8px">Agregá la línea en "Trabajo" para asignarle los servicios.</p>' : ''}
-      ${lineas.length ? `<label for="f-operadora">Operadora</label>
-        <select id="f-operadora"><option value="">Elegir…</option>${cat.operadoras.map(o => `<option value="${esc(o.id)}" ${mismoId(o.id, b.sistema.operadorasPorLinea[activa]) ? 'selected' : ''}>${esc(o.nombre)}</option>`).join('')}</select>` : ''}
       <div id="servicios">${servicios.length ? htmlServicios(servicios, cant) : '<p class="ayuda" style="margin:8px 0 0">Todavía no hay servicios: tocá su abreviatura abajo para agregarlos.</p>'}</div>
       ${htmlAgregarServicio(!servicios.length || b.panelServAbierto)}`;
     // Pestañas: delegado en el contenedor (se asigna, no se suma, porque el contenedor se reutiliza)
@@ -390,11 +388,6 @@ export async function vistaNuevo(vista) {
       guardarBorrador(false);
       pintarServicios();
     };
-    $('#f-operadora', cont)?.addEventListener('change', e => {
-      b.sistema.operadorasPorLinea[activa] = e.target.value;
-      sincronizarLinea(b.sistema);
-      guardarBorrador();
-    });
     conectarServicios($('#servicios', cont), cant, () => {
       guardarBorrador();
       // Cantidad de servicios de la pestaña
