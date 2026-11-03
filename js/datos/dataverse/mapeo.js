@@ -21,6 +21,16 @@ export const formateado = (fila, columna, siNo = '') => fila?.[columna + FORMATE
 export const valor = (fila, ...cols) => { for (const c of cols) if (fila?.[c] !== undefined && fila[c] !== null) return fila[c]; return ''; };
 const activo = f => f.cr1d0_activo !== false && f.statecode !== 1;
 
+// N° de referencia como lo muestra ALO Manager: "12" creado en 2026 -> "GEN-2026-0012" (si ya tiene año, queda igual)
+export function numeroNegocio(valor, fecha, prefijo) {
+  const crudo = String(valor || '').trim();
+  if (!crudo) return '';
+  const p = String(prefijo || '').toUpperCase();
+  if (new RegExp(`^${p}-\\d{4}-`, 'i').test(crudo) || !new RegExp(`^(?:${p}-?)?\\d+$`, 'i').test(crudo)) return crudo;
+  const anio = String(fecha || '').match(/\d{4}/)?.[0] || String(new Date().getFullYear());
+  return `${p}-${anio}-${crudo.match(/(\d+)\s*$/)[1].padStart(4, '0')}`;
+}
+
 
 export const MAPEOS = {
   empresas: (f, m) => ({ id: idDv(f[m.PrimaryIdAttribute]), nombre: f[m.PrimaryNameAttribute] || 'Sin nombre', abreviatura: f.cr1d0_abreviatura || '', activo: activo(f) }),
@@ -45,7 +55,8 @@ export const MAPEOS = {
     recuento: f.cr1d0_recuento ?? null, activo: activo(f),
   }),
   solicitudes: f => ({
-    id: idDv(f.cr1d0_generalsolicitudid), numero: f.cr1d0_nrosolicitudsistema || '', numeroExterno: f.cr1d0_nrosolicitudexterno || '',
+    id: idDv(f.cr1d0_generalsolicitudid), numeroExterno: f.cr1d0_nrosolicitudexterno || '',
+    numero: numeroNegocio(f.cr1d0_nrosolicitudsistema, f.cr1d0_fechacreacion || f.createdon, 'GEN'),
     empresaId: lookupId(f, 'cr1d0_clienteempresaid'), empresa: lookupNombre(f, 'cr1d0_clienteempresaid'),
     ubicacion: f.cr1d0_ubicacion || '', locacion: f.cr1d0_locacion || '', estado: formateado(f, 'cr1d0_estadogeneral'), activo: activo(f),
   }),

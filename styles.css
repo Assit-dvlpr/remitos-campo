@@ -294,6 +294,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .fila-interna { padding: 8px 10px; gap: 8px; }
 .fila-interna .nro { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fila-interna .sub { white-space: nowrap; }
+.fila-interna .refs { color: var(--texto); }
 .fila-interna .estado { padding: 2px 8px; font-size: 11px; }
 #banner .cerrar-aviso {
   flex: none; min-height: 0; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;

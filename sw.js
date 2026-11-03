@@ -1,6 +1,6 @@
 // Guarda la app en el celular para que abra sin señal. Solo archivos propios:
 // el login de Microsoft y SharePoint siempre van por la red.
-const VERSION = 'remitos-campo-1.5.5';
+const VERSION = 'remitos-campo-1.5.6';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'img/logo_alonger.jpg', 'img/alo.jpg',

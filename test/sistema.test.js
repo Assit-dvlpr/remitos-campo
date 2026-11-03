@@ -5,7 +5,7 @@ import {
   esSectorElectrico, usuarioHabilitado, ordenesAbiertas, filtrarOrdenes, lineasDeEmpresa, empresasConLineas,
   materialesDeStock, materialesRecuperadosDe, internaCerrada, referenciasFaltantes,
 } from '../js/dominio/sistema.js';
-import { lookupId, mapear } from '../js/datos/dataverse/mapeo.js';
+import { lookupId, mapear, numeroNegocio } from '../js/datos/dataverse/mapeo.js';
 import { mismoId } from '../js/nucleo/ids.js';
 import { dataverse, REFERENCIAS as ref } from '../js/datos/dataverse/demo.js';
 
@@ -95,4 +95,11 @@ test('resumenSistema traduce los IDs guardados a nombres', async () => {
   assert.equal(s.sector, cat.sectores[0].nombre);
   assert.equal(resumenSistema(cat, null), null);
   assert.equal(resumenSistema(null, { tipo: 'nuevo' }).empresa, '');
+});
+
+test('N° de solicitud como en ALO Manager (GEN-año-número)', () => {
+  assert.equal(numeroNegocio('12', '2026-03-01T00:00:00Z', 'GEN'), 'GEN-2026-0012');
+  assert.equal(numeroNegocio('GEN-2025-0007', '2026-01-01', 'GEN'), 'GEN-2025-0007');
+  assert.equal(numeroNegocio('ABC-x', '2026-01-01', 'GEN'), 'ABC-x');
+  assert.equal(numeroNegocio('', '2026', 'GEN'), '');
 });

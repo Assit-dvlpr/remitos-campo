@@ -37,26 +37,32 @@ export function vistaInternas(vista, { alElegir, alVolver }) {
   vista.innerHTML = `
     <button type="button" class="volver" id="btn-volver">← Volver</button>
     <h1 class="titulo">Elegí la interna</h1>
-    <input id="f-buscar" type="search" placeholder="Buscar: empresa, locación o solicitud" autocomplete="off" aria-label="Buscar interna">
+    <input id="f-buscar" type="search" placeholder="Buscar empresa, N°, referencia, locación" autocomplete="off" aria-label="Buscar interna">
     <p class="ayuda" id="cuantas" style="margin:6px 0 0"></p>
     <div id="ordenes" class="lista-remitos lista-desplazable lista-compacta" style="margin-top:6px"></div>`;
 
   const pintar = texto => {
     const lista = filtrarOrdenes(todas, texto);
-    $('#cuantas', vista).textContent = lista.length > 4 ? `${lista.length} internas, las más nuevas primero. Deslizá para ver más.` : '';
+    $('#cuantas', vista).textContent = lista.length > 1 ? `${lista.length} internas, las más nuevas primero.` : '';
     const cont = $('#ordenes', vista);
     cont.scrollTop = 0;
-    // Solo empresa, locación y N° de solicitud
+    // Empresa, N° de ALO Manager y referencia externa de la solicitud, y locación
     cont.innerHTML = lista.length ? lista.map(o => `<button type="button" class="remito-fila fila-interna" data-orden="${esc(o.id)}">
         <div class="datos">
           <div class="nro">${esc(o.empresa?.nombre || o.solicitud.empresa || 'Sin empresa')}</div>
-          <div class="sub">${esc([o.locacion || o.solicitud.locacion || o.solicitud.ubicacion || 'Sin locación', o.solicitud.numero].filter(Boolean).join(' · '))}</div>
+          <div class="sub refs">${esc(o.solicitud.numero || 'Sin N°')}${o.solicitud.numeroExterno ? ` · <b>Ref. ${esc(o.solicitud.numeroExterno)}</b>` : ''}</div>
+          <div class="sub">${esc(o.locacion || o.solicitud.locacion || o.solicitud.ubicacion || 'Sin locación')}</div>
         </div>
       </button>`).join('') : `<p class="vacio">${texto ? 'Ninguna interna coincide.' : 'No hay internas abiertas.'}</p>`;
-    // Se ven 4 y asoma la quinta, para que se note que hay más
-    const filas = [...cont.children];
-    cont.style.maxHeight = filas.length > 4 ? `${filas[4].offsetTop + 18}px` : '';
+    ajustarAlto();
   };
+  // La lista ocupa hasta el final de la pantalla y se desliza adentro (la página no se mueve)
+  const ajustarAlto = () => {
+    const cont = $('#ordenes', vista);
+    if (!cont?.isConnected) { removeEventListener('resize', ajustarAlto); return; }
+    cont.style.maxHeight = `${Math.max(220, innerHeight - cont.getBoundingClientRect().top - 12)}px`;
+  };
+  addEventListener('resize', ajustarAlto);
   pintar('');
 
   $('#btn-volver', vista).addEventListener('click', alVolver);
