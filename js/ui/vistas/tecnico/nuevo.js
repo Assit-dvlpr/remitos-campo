@@ -81,7 +81,9 @@ function aplicarOrigen(b, origen) {
       operadorasPorLinea: o.lineas.length > 1 ? Object.fromEntries(o.lineas.map(l => [l.id, l.operadoraId || ''])) : {},
     };
     b.lineaServ = {};
-    if (!b.establecimiento && o.solicitud.ubicacion) b.establecimiento = o.solicitud.ubicacion;
+    // Establecimiento = locación (la Ubicación de la solicitud son coordenadas)
+    const locacion = o.locacion || o.solicitud.locacion;
+    if (!b.establecimiento && locacion) b.establecimiento = locacion;
   } else {
     b.sistema = { tipo: 'nuevo', ordenId: '', solicitudId: '', empresaId: '', lineaId: '', operadoraId: '', sectorId };
   }

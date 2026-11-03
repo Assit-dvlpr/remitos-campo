@@ -10,6 +10,10 @@ import { $ } from '../../dom.js';
 const veTodas = () => [ROLES.REVISOR, ROLES.ADMIN].includes(estado.usuario.rol);
 const internas = () => ordenesAbiertas(estado.sistema.catalogos, { sectorId: estado.sistema.usuario.sectorId, verTodas: veTodas(), ref: estado.sistema.ref });
 
+// Abreviaturas de los servicios de la interna (MONT, DMONT…), sin repetir
+const abreviaturas = o => [...new Set((o.servicios || []).map(s => s.servicio).filter(Boolean)
+  .map(s => String(s.codigoInterno || s.codigo || s.nombre).trim().toUpperCase()))].join(' · ');
+
 // Paso 1: de una interna o nuevo
 export function vistaElegirOrigen(vista, { alInterna, alNuevo }) {
   const n = internas().length;
@@ -51,7 +55,7 @@ export function vistaInternas(vista, { alElegir, alVolver }) {
         <div class="datos">
           <div class="nro">${esc(o.empresa?.nombre || o.solicitud.empresa || 'Sin empresa')}</div>
           <div class="sub refs"><b>${esc(identidadInterna(o, o.sector) || 'Sin número')}</b></div>
-          <div class="sub">${esc(o.locacion || o.solicitud.locacion || o.solicitud.ubicacion || 'Sin locación')}</div>
+          <div class="sub">${esc(o.locacion || o.solicitud.locacion || 'Sin locación')}${abreviaturas(o) ? ` · <b class="abrevs">${esc(abreviaturas(o))}</b>` : ''}</div>
         </div>
       </button>`).join('') : `<p class="vacio">${texto ? 'Ninguna interna coincide.' : 'No hay internas abiertas.'}</p>`;
     ajustarAlto();

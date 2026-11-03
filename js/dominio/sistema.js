@@ -91,7 +91,7 @@ export function identidadInterna(o, sector) {
 export function filtrarOrdenes(ordenes, texto) {
   const t = etiqueta(texto);
   if (!t) return ordenes;
-  return ordenes.filter(o => [o.numero, o.numeroALO, o.solicitud?.numero, o.solicitud?.numeroExterno, o.empresa?.nombre, o.solicitud?.ubicacion, o.solicitud?.locacion]
+  return ordenes.filter(o => [o.numero, o.numeroALO, o.solicitud?.numero, o.solicitud?.numeroExterno, o.empresa?.nombre, o.locacion, o.solicitud?.locacion, ...(o.servicios || []).map(s => s.servicio?.codigoInterno || s.servicio?.codigo)]
     .some(v => etiqueta(v).includes(t)));
 }
 
