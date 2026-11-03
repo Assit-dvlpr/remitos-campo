@@ -25,7 +25,10 @@ export const guardarReferenciasPrueba = ref => recordar('referencias-prueba', re
 
 // Devuelve { usuario, sector, electrico, catalogos, sinSenal }, o null si el usuario trabaja como siempre
 // (no está en el sistema o no hay señal ni copia). Solo un usuario deshabilitado bloquea la entrada.
+// Por qué no se usa el sistema en esta sesión (cuando cargarSistema devuelve null), para mostrarlo en pantalla
+export let motivoSinSistema = '';
 export async function cargarSistema(email) {
+  motivoSinSistema = '';
   const ref = await referencias();
   const faltan = referenciasFaltantes(ref);
   // En la prueba se entra igual: sin referencias no se filtran internas ni usuarios y nadie es del sector eléctrico
@@ -42,12 +45,15 @@ export async function cargarSistema(email) {
   } catch (e) {
     const copia = await catalogosGuardados.leer('ultimo').catch(() => null);
     // Sin señal y sin copia: se sigue con el funcionamiento de siempre (sin sistema)
-    if (!copia || copia.usuario?.email !== String(email).toLowerCase()) return null;
+    if (!copia || copia.usuario?.email !== String(email).toLowerCase()) {
+      motivoSinSistema = navigator.onLine ? `No se pudo leer Dataverse: ${e.message}` : 'Sin señal y todavía no hay datos del sistema guardados en este celular.';
+      return null;
+    }
     ({ usuario, catalogos } = copia);
     sinSenal = true;
   }
   // Sin alta en el sistema principal: funcionamiento de siempre (algunos sectores trabajan así)
-  if (!usuario) return null;
+  if (!usuario) { motivoSinSistema = `Tu cuenta (${email}) no está en General Usuario de Dataverse.`; return null; }
   if (!usuarioHabilitado(usuario, ref)) throw new Error(`Tu usuario del sistema principal está "${usuario.estado}". Pedile al administrador que lo habilite.`);
   const sector = buscarPorId(catalogos.sectores, usuario.sectorId);
   return { usuario, sector, electrico: esSectorElectrico(usuario.sectorId, ref), catalogos, ref, sinSenal, faltan };

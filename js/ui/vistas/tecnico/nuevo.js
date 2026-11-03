@@ -18,7 +18,7 @@ import { htmlServicios, conectarServicios } from '../../componentes/servicios.js
 import { htmlSelectExtra, htmlAutomaticos } from '../../componentes/extras.js';
 import { vistaMisRemitos } from './mis-remitos.js';
 import { vistaElegirOrigen, vistaInternas } from './inicio.js';
-import { sistemaActivo } from '../../../datos/sistema.js';
+import { sistemaActivo, motivoSinSistema } from '../../../datos/sistema.js';
 import { mismoId } from '../../../nucleo/ids.js';
 import {
   buscarPorId, empresasConLineas, acompanantesPosibles, lineasDeEmpresa, nombreLinea, materialesDeStock, materialesRecuperadosDe,
@@ -221,6 +221,8 @@ export async function vistaNuevo(vista) {
     const autos = completarAutomaticos(cli.extras, b.extras);
     vista.innerHTML = `
       ${conSistema || b.itemId ? '<button type="button" class="volver" id="btn-volver">← Volver</button>' : ''}
+      ${!conSistema && sistemaActivo() && motivoSinSistema ? `<div class="mensaje alerta">No se pudo usar el sistema, así que se carga como hasta ahora. ${esc(motivoSinSistema)}
+        <div class="acciones"><button type="button" id="btn-reintentar">Reintentar</button></div></div>` : ''}
       <h1 class="titulo">${b.itemId ? 'Corregir remito' : 'Nuevo remito'}</h1>
       ${b.comentario ? `<div class="mensaje alerta"><b>Observación de la revisión:</b> ${esc(b.comentario)}</div>` : ''}
       ${conSistema ? `<section class="tarjeta" id="sec-sistema"><h2>Trabajo</h2>${htmlSistema(b)}</section>` : ''}
@@ -387,6 +389,7 @@ export async function vistaNuevo(vista) {
       guardarBorrador(); pintar();
     });
     on('#btn-volver', 'click', volver);
+    on('#btn-reintentar', 'click', () => location.reload());
     on('#f-acomp', 'input', e => { b.acompanante = e.target.value; guardarBorrador(); });
     // Con sistema el acompañante se elige por GUID; para la planilla se usa su apellido
     on('#f-acomp-id', 'change', e => {
