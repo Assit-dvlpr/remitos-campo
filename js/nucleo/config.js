@@ -3,7 +3,7 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.5.0',
+  version: '1.5.1',
 
   // Microsoft Entra (registro de la app, tipo SPA)
   tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
@@ -56,3 +56,7 @@ export const CONFIG = {
 export const MODO_DEMO =
   CONFIG.clientId.startsWith('COMPLETAR') || CONFIG.sitio.host.startsWith('COMPLETAR') ||
   new URLSearchParams(location.search).has('demo');
+
+// Prueba de Dataverse (?prueba): login real y Dataverse real, pero SharePoint y los Excel simulados en el navegador.
+// Sirve para probar catálogos, internas, materiales y la tabla intermedia sin tocar las listas ni las planillas.
+export const MODO_PRUEBA_DV = !MODO_DEMO && new URLSearchParams(location.search).has('prueba');

@@ -1,5 +1,5 @@
 // Arranque: modo offline, login, usuario y clientes, y primera pantalla.
-import { CONFIG, MODO_DEMO } from './nucleo/config.js';
+import { CONFIG, MODO_DEMO, MODO_PRUEBA_DV } from './nucleo/config.js';
 import { ROLES } from './nucleo/constantes.js';
 import { estado, recordar } from './nucleo/estado.js';
 import { esc } from './nucleo/texto.js';
@@ -41,6 +41,17 @@ async function conectarDatos() {
     return null;
   }
   estado.salir = auth.salir;
+  if (MODO_PRUEBA_DV) {
+    // SharePoint y Excel simulados; el usuario es la cuenta real (para buscarlo en Dataverse), con todos los permisos
+    $('#banner').innerHTML = '<div class="banner">Prueba de Dataverse: catálogos y tabla intermedia reales; SharePoint y los Excel simulados en este navegador.</div>';
+    const { api: demo, CLIENTES_DEMO } = await import('./datos/demo.js');
+    // El cliente demo no trae vínculos con el sistema: se eligen en Configuración con los catálogos reales
+    delete CLIENTES_DEMO.demo.empresaId;
+    CLIENTES_DEMO.demo.items.forEach(i => { delete i.servicioId; });
+    return { ...demo, prueba: true, async usuario() {
+      return { ...(await demo.usuario()), email: String(cuenta.username || '').toLowerCase(), displayName: cuenta.name || cuenta.username };
+    } };
+  }
   return (await import('./datos/sharepoint/api.js')).api;
 }
 
@@ -69,10 +80,16 @@ async function iniciar() {
     try {
       estado.sistema = await cargarSistema(estado.usuario.email);
     } catch (e) {
-      $('#vista').innerHTML = `<div class="mensaje error">${esc(e.message)}</div>` +
-        (estado.salir ? '<div class="acciones"><button id="btn-salir-error">Salir / cambiar de cuenta</button></div>' : '');
-      $('#btn-salir-error')?.addEventListener('click', () => estado.salir());
-      return;
+      // En la prueba, sin referencias se entra igual para elegirlas en Configuración → Sistema
+      if (MODO_PRUEBA_DV && e.codigo === 'REFERENCIAS') {
+        estado.sistema = null;
+        $('#banner').insertAdjacentHTML('beforeend', `<div class="banner">${esc(e.message)} Elegilas en Configuración → Sistema.</div>`);
+      } else {
+        $('#vista').innerHTML = `<div class="mensaje error">${esc(e.message)}</div>` +
+          (estado.salir ? '<div class="acciones"><button id="btn-salir-error">Salir / cambiar de cuenta</button></div>' : '');
+        $('#btn-salir-error')?.addEventListener('click', () => estado.salir());
+        return;
+      }
     }
     if (estado.sistema?.catalogos.avisos?.length) console.warn('Dataverse:', estado.sistema.catalogos.avisos);
   }

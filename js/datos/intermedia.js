@@ -1,9 +1,10 @@
 // Tabla intermedia de Dataverse: al aprobar, el remito queda ahí para que ALO Manager lo importe.
 // En demo se guarda en el navegador. Si no está activada, no hace nada.
-import { CONFIG, MODO_DEMO } from '../nucleo/config.js';
+import { CONFIG, MODO_DEMO, MODO_PRUEBA_DV } from '../nucleo/config.js';
 import { registroIntermedio, ESTADOS_INTERMEDIA } from '../dominio/intermedia.js';
 
-export const intermediaActiva = () => MODO_DEMO || (CONFIG.dataverse.activo && CONFIG.dataverse.escribir);
+// En modo prueba se escribe de verdad en la tabla intermedia (es lo que se quiere probar)
+export const intermediaActiva = () => MODO_DEMO || MODO_PRUEBA_DV || (CONFIG.dataverse.activo && CONFIG.dataverse.escribir);
 
 const CLAVE_DEMO = 'demo-intermedia';
 const demo = {

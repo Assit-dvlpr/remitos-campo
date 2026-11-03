@@ -39,6 +39,19 @@ export function metadata(tabla) {
   return metadatas[tabla];
 }
 
+// Opciones (valor y etiqueta) de una columna de opción, para elegir las referencias por valor
+export async function opciones(tabla, columna) {
+  const r = await get(`${API()}/EntityDefinitions(LogicalName='${tabla}')/Attributes(LogicalName='${columna}')` +
+    '/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)');
+  return (r.OptionSet?.Options || []).map(o => ({ valor: o.Value, etiqueta: o.Label?.UserLocalizedLabel?.Label || String(o.Value) }));
+}
+
+// Nombres lógicos de todas las columnas de una tabla (para verificar la configuración)
+export async function columnas(tabla) {
+  const r = await get(`${API()}/EntityDefinitions(LogicalName='${tabla}')/Attributes?$select=LogicalName`);
+  return r.value.map(a => a.LogicalName);
+}
+
 // Todas las filas de una tabla. consulta = '$filter=...&$orderby=...' (sin '?')
 export async function leerTodo(tabla, consulta = '') {
   const m = await metadata(tabla);

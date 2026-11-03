@@ -1,21 +1,38 @@
 // Conexión con el sistema principal (Dataverse, solo lectura): usuario, sector y catálogos.
 // Con señal lee Dataverse y guarda una copia en el celular; sin señal usa esa copia.
-import { CONFIG, MODO_DEMO } from '../nucleo/config.js';
+import { CONFIG, MODO_DEMO, MODO_PRUEBA_DV } from '../nucleo/config.js';
+import { recordar } from '../nucleo/estado.js';
 import { buscarPorId, esSectorElectrico, usuarioHabilitado, referenciasFaltantes } from '../dominio/sistema.js';
 import { catalogosGuardados } from './cola.js';
 
-export const sistemaActivo = () => MODO_DEMO || CONFIG.dataverse.activo;
+export const sistemaActivo = () => MODO_DEMO || MODO_PRUEBA_DV || CONFIG.dataverse.activo;
 
 const fuente = async () => (MODO_DEMO ? import('./dataverse/demo.js') : import('./dataverse/api.js')).then(m => m.dataverse);
 // GUIDs y valores de opciones con los que se decide (sector eléctrico, internas cerradas, usuarios habilitados)
-const referencias = async () => (MODO_DEMO ? (await import('./dataverse/demo.js')).REFERENCIAS : CONFIG.dataverse.referencias);
+// En modo prueba, lo elegido en Configuración → Sistema (guardado en el navegador) completa lo que falte en config.js
+export async function referencias() {
+  if (MODO_DEMO) return (await import('./dataverse/demo.js')).REFERENCIAS;
+  const r = CONFIG.dataverse.referencias;
+  if (!MODO_PRUEBA_DV) return r;
+  const g = recordar('referencias-prueba') || {};
+  return {
+    sectorElectricoId: r.sectorElectricoId || g.sectorElectricoId || '',
+    internaEstadosCerrados: r.internaEstadosCerrados?.length ? r.internaEstadosCerrados : g.internaEstadosCerrados || [],
+    usuarioEstadosHabilitados: r.usuarioEstadosHabilitados?.length ? r.usuarioEstadosHabilitados : g.usuarioEstadosHabilitados || [],
+  };
+}
+export const guardarReferenciasPrueba = ref => recordar('referencias-prueba', ref);
 
 // Devuelve { usuario, sector, electrico, catalogos, sinSenal }, o null si el usuario trabaja como siempre
 // (no está en el sistema o no hay señal ni copia). Solo un usuario deshabilitado bloquea la entrada.
 export async function cargarSistema(email) {
   const ref = await referencias();
   const faltan = referenciasFaltantes(ref);
-  if (faltan.length) throw new Error(`Falta configurar en config.js (dataverse.referencias): ${faltan.join(', ')}.`);
+  if (faltan.length) {
+    const e = new Error(`Falta configurar en config.js (dataverse.referencias): ${faltan.join(', ')}.`);
+    e.codigo = 'REFERENCIAS';
+    throw e;
+  }
   const dv = await fuente();
   let usuario, catalogos, sinSenal = false;
   try {

@@ -1,6 +1,6 @@
 // Guarda la app en el celular para que abra sin señal. Solo archivos propios:
 // el login de Microsoft y SharePoint siempre van por la red.
-const VERSION = 'remitos-campo-1.5.0';
+const VERSION = 'remitos-campo-1.5.1';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'img/logo_alonger.jpg', 'img/alo.jpg',
@@ -19,7 +19,7 @@ const ARCHIVOS = [
   'js/ui/componentes/servicios.js', 'js/ui/componentes/extras.js', 'js/ui/componentes/estado-remito.js', 'js/ui/componentes/materiales.js',
   'js/ui/vistas/tecnico/inicio.js', 'js/ui/vistas/tecnico/nuevo.js', 'js/ui/vistas/tecnico/mis-remitos.js',
   'js/ui/vistas/revisor/lista.js', 'js/ui/vistas/revisor/detalle.js',
-  'js/ui/vistas/config/configuracion.js', 'js/ui/vistas/config/clientes.js',
+  'js/ui/vistas/config/configuracion.js', 'js/ui/vistas/config/clientes.js', 'js/ui/vistas/config/sistema.js',
 ];
 
 self.addEventListener('install', e => {

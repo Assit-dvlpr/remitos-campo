@@ -1,0 +1,2 @@
+# Archivos de terceros con hash SRI: no convertir saltos de línea (CRLF rompería el hash)
+vendor/** -text

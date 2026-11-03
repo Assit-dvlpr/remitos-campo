@@ -1,9 +1,10 @@
 // Configuración inicial (administrador): estructura en SharePoint, usuarios y clientes con su Excel.
-import { CONFIG } from '../../../nucleo/config.js';
+import { CONFIG, MODO_DEMO } from '../../../nucleo/config.js';
 import { ROLES, LISTA_ROLES } from '../../../nucleo/constantes.js';
 import { estado } from '../../../nucleo/estado.js';
 import { esc } from '../../../nucleo/texto.js';
 import { $, aviso } from '../../dom.js';
+import { sistemaActivo } from '../../../datos/sistema.js';
 import { seccionClientes } from './clientes.js';
 
 export async function vistaConfiguracion(vista) {
@@ -35,7 +36,8 @@ export async function vistaConfiguracion(vista) {
       <div class="acciones"><button id="btn-usuario">Agregar usuario</button><a id="lnk-usuarios" class="boton" target="_blank" rel="noopener" hidden>Abrir lista en SharePoint</a></div>
     </section>
 
-    <section class="tarjeta" id="sec-cliente"></section>`;
+    <section class="tarjeta" id="sec-cliente"></section>
+    ${!MODO_DEMO && sistemaActivo() ? '<section class="tarjeta" id="sec-sistema-dv"></section>' : ''}`;
 
   const log = t => { $('#log-estructura', vista).innerHTML += esc(t) + '<br>'; };
 
@@ -72,4 +74,6 @@ export async function vistaConfiguracion(vista) {
   };
 
   seccionClientes($('#sec-cliente', vista), clientes);
+  const dv = $('#sec-sistema-dv', vista);
+  if (dv) import('./sistema.js').then(m => m.seccionSistema(dv));
 }
