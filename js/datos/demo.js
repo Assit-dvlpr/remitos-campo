@@ -85,6 +85,7 @@ export const api = {
     if (e.pdf) { d.pdfs[id] = await blobADataUrl(e.pdf); nuevo.archivoId = id; }
     d.remitos = d.remitos.filter(r => r.id !== id).concat(nuevo);
     guardar(d);
+    return nuevo;
   },
 
   async misRemitos(email) {

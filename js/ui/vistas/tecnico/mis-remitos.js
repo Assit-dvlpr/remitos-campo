@@ -5,15 +5,38 @@ import { esc } from '../../../nucleo/texto.js';
 import { fechaCorta } from '../../../nucleo/fechas.js';
 import { uid } from '../../../nucleo/ids.js';
 import { cola, procesarCola } from '../../../datos/cola.js';
-import { partesRemito, cantidadesDeItems } from '../../../dominio/remito.js';
-import { materialesPorServicioDeFilas } from '../../../dominio/materiales.js';
+import { partesRemito, cantidadesDeItems, cantidadesPorLinea } from '../../../dominio/remito.js';
+import { materialesPorClaveDeFilas } from '../../../dominio/materiales.js';
+import { esKm } from '../../../dominio/catalogo.js';
 import { $ } from '../../dom.js';
 import { ir, refrescarPestanas } from '../../navegacion.js';
-import { nombreServicio } from '../../componentes/servicios.js';
+import { etiquetaServicio } from '../../componentes/servicios.js';
 import { chipEstado } from '../../componentes/estado-remito.js';
 
+// "2 MONT · 1 DMONT · 35 km": por abreviatura, sumando el mismo servicio de varias líneas
 function resumenItems(r) {
-  return (r.items || []).map(i => `${i.cant} ${nombreServicio(i).split(' ').slice(0, 3).join(' ')}`).join(' · ');
+  const suma = new Map();
+  for (const i of r.items || []) {
+    const k = esKm(i) ? 'km' : etiquetaServicio(i).split(' ').slice(0, 3).join(' ');
+    suma.set(k, (suma.get(k) || 0) + (+i.cant || 0));
+  }
+  return [...suma].map(([k, n]) => (k === 'km' ? `${n} km` : `${n} ${k}`)).join(' · ');
+}
+
+// Remito del sistema rechazado -> servicios por línea, servicios fuera de la interna y materiales por línea y servicio
+function lineasParaCorregir(r) {
+  const s = r.sistema || {};
+  const lineas = (s.lineaIds || []).length ? s.lineaIds : (s.lineaId ? [s.lineaId] : []);
+  const delSistema = (r.items || []).filter(i => i.servicioId && !esKm(i));
+  // Materiales sin línea (remitos anteriores): van con la línea de su servicio, o la primera
+  const filas = (r.materiales || []).map(f => ({
+    ...f, lineaId: f.lineaId || delSistema.find(i => i.servicioId === f.servicioId && i.lineaId && i.lineaId !== '*')?.lineaId || lineas[0] || '',
+  }));
+  return {
+    cantLinea: s.empresaId ? cantidadesPorLinea(delSistema, lineas) : {},
+    servExtra: delSistema.map(({ cod, servicio, codigo, servicioId, materiales }) => ({ cod, servicio, codigo, servicioId, materiales })),
+    matServ: materialesPorClaveDeFilas(filas),
+  };
 }
 
 export async function vistaMisRemitos(vista) {
@@ -62,7 +85,7 @@ export async function vistaMisRemitos(vista) {
           ${r.estado === ESTADOS.RECHAZADO && r.comentario ? `<div class="sub" style="color:var(--error)">${esc(r.comentario)}</div>` : ''}</div>
         ${r.estado === ESTADOS.RECHAZADO
           ? `<button data-corregir="${esc(r.id)}" class="primario">Corregir</button>`
-          : chipEstado(r.estado, { tecnico: true })}
+          : chipEstado(r.estado, { tecnico: true, directo: !!r.sistema?.directo })}
       </div>`).join('')}</div>`;
     cont.querySelectorAll('[data-corregir]').forEach(btn => btn.addEventListener('click', () => {
       const r = lista.find(x => x.id === btn.dataset.corregir);
@@ -72,7 +95,8 @@ export async function vistaMisRemitos(vista) {
         fechaRemito: r.fechaRemito, establecimiento: r.establecimiento, tecnico: r.tecnico,
         cant: cantidadesDeItems(r.items),
         extras: { ...(r.extras || {}) }, acompanante: '', tecnicoEditado: true,
-        sistema: r.sistema ? { ...r.sistema } : null, matServ: materialesPorServicioDeFilas(r.materiales),
+        sistema: r.sistema ? { ...r.sistema } : null,
+        ...lineasParaCorregir(r),
         observaciones: r.observaciones, paginas: [], archivoPrevio: !!r.archivoId, comentario: r.comentario,
       };
       ir('nuevo');

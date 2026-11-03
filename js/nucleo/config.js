@@ -3,7 +3,7 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.6.6',
+  version: '1.7.0',
 
   // Microsoft Entra (registro de la app, tipo SPA)
   tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
@@ -31,7 +31,7 @@ export const CONFIG = {
     // Las decisiones se toman por GUID o por el valor numérico de cada opción, nunca por el texto.
     // Se completan una vez, leyendo el entorno (ver la especificación). Vacío = la app no arranca con Dataverse.
     referencias: {
-      sectorElectricoId: '',             // opcional: GUID del sector Seguridad eléctrica
+      sectorElectricoId: 'df13f108-355c-47a6-8f8e-f02ceceb87fb', // Seguridad Eléctrica (General Sectores)
       internaEstadosCerrados: [159370004, 159370005], // cr1d0_estadooperativo que no admiten remitos: Finalizado, Cancelada
       usuarioEstadosHabilitados: [],     // opcional: valores de cr1d0_estado del usuario que dejan entrar (vacío = no filtra)
     },

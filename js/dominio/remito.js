@@ -1,6 +1,7 @@
 // Reglas del remito: número, responsable, ítems y validaciones del técnico y de la oficina. Lógica pura.
 import { QUIEN } from '../nucleo/constantes.js';
-import { itemKm, vaAPlanilla } from './catalogo.js';
+import { itemKm, vaAPlanilla, esKm } from './catalogo.js';
+import { mismoId } from '../nucleo/ids.js';
 
 // N° de remito: punto de venta y número -> "0001-00005780". Vacío si falta alguno.
 export function normalizarRemito(pv, num) {
@@ -25,6 +26,25 @@ export const responsable = (tecnico, acompanante) =>
 export const itemsDeCantidades = (catalogo, cant) => catalogo
   .filter(it => +cant[it.cod] > 0)
   .map(it => ({ cod: it.cod, servicio: it.servicio, cant: +cant[it.cod], ...(it.servicioId ? { servicioId: it.servicioId, codigo: it.codigo || '', ...(it.materiales ? { materiales: true } : {}) } : {}) }));
+
+// Remitos del sistema: cantidades por línea { lineaId: { cod: n } } ('' = sin línea) -> ítems con su línea (sin km)
+export function itemsDeLineas(catalogo, cantLinea, lineas) {
+  const claves = lineas?.length ? lineas : [''];
+  const servicios = (catalogo || []).filter(i => !esKm(i));
+  return claves.flatMap(l => itemsDeCantidades(servicios, cantLinea?.[l] || {}).map(i => (l ? { ...i, lineaId: l } : i)));
+}
+
+// Ítems -> cantidades por línea. Los de "todas las líneas" se repiten en cada una; sin línea (o de otra) van a la primera.
+export function cantidadesPorLinea(items, lineas) {
+  const claves = lineas?.length ? lineas : [''];
+  const r = Object.fromEntries(claves.map(l => [l, {}]));
+  for (const i of items || []) {
+    if (esKm(i) || !(+i.cant > 0)) continue;
+    const destino = i.lineaId === '*' ? claves : [claves.find(l => l && mismoId(l, i.lineaId)) ?? claves[0]];
+    for (const l of destino) r[l][i.cod] = (r[l][i.cod] || 0) + +i.cant;
+  }
+  return r;
+}
 
 // Ítems del remito -> cantidades por código
 export const cantidadesDeItems = items => Object.fromEntries((items || []).map(i => [i.cod, i.cant]));

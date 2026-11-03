@@ -10,23 +10,25 @@ import { editarFoto, miniatura } from '../../../medios/fotos.js';
 import { completarAutomaticos } from '../../../dominio/extras.js';
 import { buscarEstablecimiento } from '../../../dominio/catalogo.js';
 import {
-  normalizarRemito, nombreTecnico as nombreEnPlanilla, responsable, itemsDeCantidades, kilometros, validarCarga,
+  normalizarRemito, nombreTecnico as nombreEnPlanilla, responsable, itemsDeCantidades, itemsDeLineas, kilometros, validarCarga,
 } from '../../../dominio/remito.js';
 import { $, aviso } from '../../dom.js';
 import { ir, refrescarPestanas } from '../../navegacion.js';
-import { htmlServicios, conectarServicios } from '../../componentes/servicios.js';
+import {
+  htmlServicios, conectarServicios, htmlPestanasLineas, htmlAgregarServicio, conectarAgregarServicio, etiquetaServicio,
+} from '../../componentes/servicios.js';
 import { htmlSelectExtra, htmlAutomaticos } from '../../componentes/extras.js';
 import { vistaMisRemitos } from './mis-remitos.js';
 import { vistaElegirOrigen, vistaInternas } from './inicio.js';
 import { sistemaActivo, motivoSinSistema } from '../../../datos/sistema.js';
+import { intermediaActiva } from '../../../datos/intermedia.js';
 import { mismoId } from '../../../nucleo/ids.js';
 import {
   buscarPorId, empresasConLineas, acompanantesPosibles, lineasDeEmpresa, nombreLinea, materialesDeStock, materialesRecuperadosDe,
-  clienteDelSistema, identidadInterna,
+  clienteDelSistema, identidadInterna, serviciosDelSector, esSectorElectrico,
 } from '../../../dominio/sistema.js';
-import { materialesVacios, filasMaterialesPorServicio, validarMateriales } from '../../../dominio/materiales.js';
+import { materialesVacios, claveMaterial, filasMaterialesPorClave, validarMateriales } from '../../../dominio/materiales.js';
 import { htmlMateriales, conectarMateriales } from '../../componentes/materiales.js';
-import { TODAS_LAS_LINEAS } from '../../../dominio/intermedia.js';
 import { esKm } from '../../../dominio/catalogo.js';
 
 const nombreTecnico = cli => nombreEnPlanilla(cli, estado.usuario);
@@ -77,10 +79,14 @@ function nuevoBorrador() {
     archivoPrevio: false,
     // Con sistema principal: { tipo: 'orden'|'nuevo', ordenId, solicitudId, empresaId, lineaId, operadoraId } (null = elegir)
     sistema: null,
-    // Materiales por servicio (Montaje, Desmontaje y los que requieren recuento): { servicioId: { tipo: { id: cant } } }
+    // Con empresa del sistema, servicios por línea (una pestaña por línea): { lineaId: { cod: cant } } ('' = sin línea).
+    // Los kilómetros son uno solo para todo el remito y quedan en cant.
+    cantLinea: {},
+    lineaActiva: '',
+    // Servicios agregados desde el catálogo del sector (además de los de la interna)
+    servExtra: [],
+    // Materiales por línea y servicio (Montaje, Desmontaje y los que requieren recuento): { 'lineaId|servicioId': { tipo: { id: cant } } }
     matServ: {},
-    // Con varias líneas en la interna: a qué línea va cada servicio { servicioId: lineaId | TODAS_LAS_LINEAS }
-    lineaServ: {},
   };
 }
 
@@ -93,20 +99,42 @@ function aplicarOrigen(b, origen) {
     const o = origen.orden;
     b.sistema = {
       tipo: 'orden', ordenId: o.id, solicitudId: o.solicitud.id, empresaId: o.solicitud.empresaId,
-      lineaId: o.lineas.length === 1 ? o.lineas[0].id : '', operadoraId: o.lineas.length === 1 ? o.lineas[0].operadoraId : '',
       sectorId: o.sectorId || sectorId,
-      // Varias líneas: cada servicio se asigna a una o a todas; la operadora sale de cada línea
-      lineaIds: o.lineas.length > 1 ? o.lineas.map(l => l.id) : [],
-      operadorasPorLinea: o.lineas.length > 1 ? Object.fromEntries(o.lineas.map(l => [l.id, l.operadoraId || ''])) : {},
+      // Líneas del remito (las de la interna; se pueden agregar otras de la empresa). La operadora sale de cada línea.
+      lineaIds: o.lineas.map(l => l.id),
+      operadorasPorLinea: Object.fromEntries(o.lineas.map(l => [l.id, l.operadoraId || ''])),
+      lineasAgregadas: [],
     };
-    b.lineaServ = {};
+    sincronizarLinea(b.sistema);
     // Establecimiento = locación (la Ubicación de la solicitud son coordenadas)
     const locacion = o.locacion || o.solicitud.locacion;
     if (!b.establecimiento && locacion) b.establecimiento = locacion;
   } else {
-    b.sistema = { tipo: 'nuevo', ordenId: '', solicitudId: '', empresaId: '', lineaId: '', operadoraId: '', sectorId };
+    b.sistema = {
+      tipo: 'nuevo', ordenId: '', solicitudId: '', empresaId: '', lineaId: '', operadoraId: '', sectorId,
+      lineaIds: [], operadorasPorLinea: {}, lineasAgregadas: [],
+    };
   }
   elegirClienteDeEmpresa(b);
+}
+
+// La primera línea (y su operadora) queda también como línea principal del remito
+function sincronizarLinea(s) {
+  s.lineaId = s.lineaIds?.[0] || '';
+  s.operadoraId = s.operadorasPorLinea?.[s.lineaId] || '';
+}
+
+// Remitos guardados antes de las pestañas por línea: una sola línea en lineaId
+function normalizarLineas(b) {
+  b.cantLinea ??= {};
+  b.servExtra ??= [];
+  b.matServ ??= {};
+  const s = b.sistema;
+  if (!s) return;
+  s.lineaIds = (s.lineaIds || []).length ? s.lineaIds : (s.lineaId ? [s.lineaId] : []);
+  s.operadorasPorLinea ??= {};
+  if (s.lineaId && s.operadoraId && !s.operadorasPorLinea[s.lineaId]) s.operadorasPorLinea[s.lineaId] = s.operadoraId;
+  s.lineasAgregadas ??= [];
 }
 
 // Con empresa del sistema, el cliente es esa empresa y los servicios salen de Dataverse (por GUID).
@@ -114,29 +142,24 @@ function aplicarOrigen(b, origen) {
 // Sin empresa (remito nuevo como hasta ahora) se usan los clientes configurados de siempre.
 const deSistema = b => Boolean(b.sistema?.empresaId);
 function clienteActual(b) {
-  if (deSistema(b) && estado.sistema) return clienteDelSistema(estado.sistema.catalogos, b.sistema, estado.clientes);
+  if (deSistema(b) && estado.sistema) return clienteDelSistema(estado.sistema.catalogos, b.sistema, estado.clientes, b.servExtra || [], { soloInterna: true });
   return estado.clientes[b.cliente];
 }
 function elegirClienteDeEmpresa(b) {
   const clave = deSistema(b) ? clienteActual(b).claveExcel : (estado.clientes[b.cliente] ? b.cliente : Object.keys(estado.clientes)[0]);
   const marca = deSistema(b) ? `${b.sistema.empresaId}|${b.sistema.ordenId}` : '';
-  if (clave !== b.cliente || marca !== (b.marcaServicios || '')) { b.cliente = clave; b.cant = {}; b.extras = {}; b.marcaServicios = marca; }
+  if (clave !== b.cliente || marca !== (b.marcaServicios || '')) {
+    b.cliente = clave; b.cant = {}; b.cantLinea = {}; b.servExtra = []; b.matServ = {}; b.extras = {}; b.marcaServicios = marca;
+  }
   if (!b.tecnicoEditado) b.tecnico = nombreTecnico(clienteActual(b));
 }
 
-// Líneas que se ofrecen: las de la interna si tiene, si no las de la empresa
-function lineasPosibles(b) {
-  const cat = estado.sistema.catalogos;
-  if (b.sistema.tipo === 'orden') {
-    const o = buscarPorId(cat.ordenesInternas, b.sistema.ordenId);
-    const deOrden = o ? (cat.solicitudLineas || []).filter(l => mismoId(l.ordenInternaId, o.id) || (!l.ordenInternaId && mismoId(l.solicitudId, o.solicitudId)))
-      .map(l => buscarPorId(cat.lineas, l.lineaId)).filter(Boolean) : [];
-    if (deOrden.length) return deOrden;
-  }
-  return lineasDeEmpresa(cat, b.sistema.empresaId);
-}
-
-const variasLineas = b => (b.sistema?.lineaIds || []).length > 1;
+// Líneas del remito (con empresa del sistema)
+const lineasDe = b => (deSistema(b) ? b.sistema.lineaIds || [] : []);
+// Líneas de la empresa que se pueden agregar (por si la interna llegó incompleta o se trabajó para otra línea)
+const lineasParaAgregar = b => lineasDeEmpresa(estado.sistema.catalogos, b.sistema.empresaId)
+  .filter(l => !lineasDe(b).some(id => mismoId(id, l.id)));
+const nombreDeLinea = id => nombreLinea(buscarPorId(estado.sistema.catalogos.lineas, id)) || 'Línea';
 
 function htmlSistema(b) {
   const cat = estado.sistema.catalogos;
@@ -151,33 +174,22 @@ function htmlSistema(b) {
   }
   const empresas = s.tipo === 'orden' ? [buscarPorId(cat.empresas, s.empresaId)].filter(Boolean) : empresasConLineas(cat);
   if (s.tipo === 'nuevo') cabecera = `<p class="ayuda" style="margin:0">Remito nuevo, como hasta ahora. Empresa, línea y operadora son opcionales.</p>`;
+  const agregables = s.empresaId ? lineasParaAgregar(b) : [];
   return `${cabecera}
     <label for="f-empresa">Empresa</label>
     <select id="f-empresa" ${s.tipo === 'orden' ? 'disabled' : ''}><option value="">Elegir…</option>${opt(empresas, s.empresaId)}</select>
-    ${variasLineas(b) ? `<span class="etiqueta">Líneas de la interna</span>
-      <div>${s.lineaIds.map(id => `<span class="chip">${esc(nombreLinea(buscarPorId(cat.lineas, id)))}</span>`).join(' ')}</div>
-      <p class="ayuda" style="margin:4px 0 0">En cada servicio elegís a qué línea pertenece, o a todas.</p>` : `
-    <div class="dos-col">
-      <div><label for="f-linea">Línea</label>
-        <select id="f-linea"><option value="">Elegir…</option>${opt(lineasPosibles(b), s.lineaId, nombreLinea)}</select></div>
-      <div><label for="f-operadora">Operadora</label>
-        <select id="f-operadora"><option value="">Elegir…</option>${opt(cat.operadoras, s.operadoraId)}</select></div>
-    </div>`}`;
+    ${s.empresaId ? `<span class="etiqueta">Líneas</span>
+      <div class="chips-lineas">${s.lineaIds.length ? s.lineaIds.map(id => `<span class="chip">${esc(nombreDeLinea(id))}${s.lineasAgregadas.includes(id)
+        ? `<button type="button" data-quitar-linea="${esc(id)}" aria-label="Quitar ${esc(nombreDeLinea(id))}">✕</button>` : ''}</span>`).join('')
+        : '<span class="ayuda">Sin líneas todavía.</span>'}</div>
+      ${agregables.length ? `<select id="f-agregar-linea" aria-label="Agregar línea"><option value="">+ Agregar línea…</option>${opt(agregables, '', nombreLinea)}</select>` : ''}
+      <p class="ayuda" style="margin:4px 0 0">En "Servicios realizados" hay una pestaña por línea para cargar lo de cada una.</p>` : ''}`;
 }
 
-// Líneas a las que va un servicio (todas si se adjunta a todas o todavía no se eligió)
-function lineasDeServicio(b, servicioId) {
-  if (!variasLineas(b)) return [b.sistema.lineaId || ''];
-  const l = b.lineaServ?.[servicioId];
-  return !l || l === TODAS_LAS_LINEAS ? b.sistema.lineaIds : [l];
-}
-
-// Materiales disponibles por tipo: stock nuevo (todos) y recuperado de la empresa y la(s) línea(s) del servicio
-function opcionesMateriales(b, servicioId) {
+// Materiales disponibles por tipo: stock nuevo (todos) y recuperado de la empresa y la línea (sin línea, de toda la empresa)
+function opcionesMateriales(b, lineaId) {
   const cat = estado.sistema.catalogos;
-  const lineas = lineasDeServicio(b, servicioId);
-  const rec = lineas.flatMap(l => materialesRecuperadosDe(cat, b.sistema.empresaId, l)
-    .map(m => (lineas.length > 1 ? { ...m, nombre: `${m.nombre} — ${nombreLinea(buscarPorId(cat.lineas, m.lineaId))}` } : m)));
+  const rec = materialesRecuperadosDe(cat, b.sistema.empresaId, lineaId || '');
   return { stock: materialesDeStock(cat), recuperado: rec, reutilizado: rec };
 }
 
@@ -198,8 +210,7 @@ export async function vistaNuevo(vista) {
     b = volvioDeCamara ? await borrador.leer().catch(() => null) : null;
     if (!b) { await borrador.borrar().catch(() => {}); b = nuevoBorrador(); } else tocado = true;
   }
-  b.matServ ??= {};
-  b.lineaServ ??= {};
+  normalizarLineas(b);
   const conSistema = sistemaActivo() && estado.sistema;
   if (!(conSistema && deSistema(b)) && !estado.clientes[b.cliente]) b.cliente = Object.keys(estado.clientes)[0];
   // Al corregir un remito cargado antes del sistema no se vuelve a la pantalla inicial: queda como remito nuevo
@@ -217,21 +228,30 @@ export async function vistaNuevo(vista) {
   let paso = b.sistema || b.origenElegido ? 'form' : 'elegir';
   const avanzar = p => { paso = p; history.pushState({ remitoPaso: p }, ''); guardarBorrador(false); pintar(); window.scrollTo(0, 0); };
   const volverA = p => {
-    // Al dejar el formulario se suelta la interna (y lo que dependía de ella); el resto de lo cargado se conserva
-    if (p !== 'form' && !b.itemId) b.origenElegido = false;
-    if (p !== 'form' && b.sistema && !b.itemId) { b.sistema = null; b.cant = {}; b.matServ = {}; b.lineaServ = {}; guardarBorrador(false); }
+    // Al dejar el formulario se arranca de cero: otro remito no hereda nada (ni la foto)
+    if (p !== 'form' && paso === 'form' && !b.itemId) {
+      clearTimeout(tGuardar);
+      borrador.borrar().catch(() => {});
+      b = nuevoBorrador();
+      tocado = false;
+    }
     paso = p; pintar(); window.scrollTo(0, 0);
   };
+  const descartaCambios = () => !(paso === 'form' && tocado && !b.itemId)
+    || confirm('Si volvés se borra lo cargado en este remito (también la foto). ¿Volver igual?');
   const anterior = () => (b.sistema?.tipo === 'orden' ? 'internas' : 'elegir');
   const volver = () => {
     if (b.itemId) { if (confirmarSalida()) { tocado = false; ir('mis'); } return; }
     if (history.state?.remitoPaso) history.back();
-    else { history.replaceState({ remitoPaso: anterior() }, ''); volverA(anterior()); }
+    else if (descartaCambios()) { history.replaceState({ remitoPaso: anterior() }, ''); volverA(anterior()); }
   };
   alVolverAtras = e => {
     const r = location.hash.slice(1).split('/')[0];
     if (r && r !== 'nuevo') return;
-    volverA(e.state?.remitoPaso || 'elegir');
+    const destino = e.state?.remitoPaso || 'elegir';
+    // Atrás desde el formulario con cambios: si no confirma, se queda (y se repone el paso en el historial)
+    if (destino !== 'form' && !descartaCambios()) { history.pushState({ remitoPaso: 'form' }, ''); return; }
+    volverA(destino);
   };
 
   function pintar() {
@@ -315,9 +335,11 @@ export async function vistaNuevo(vista) {
 
       <section class="tarjeta">
         <h2>Servicios realizados</h2>
-        <p class="ayuda" style="margin:0 0 8px">${cli.sistema ? 'Servicios del sistema ' + (b.sistema.tipo === 'orden' ? 'de la interna' : 'de tu sector') + '. ' : ''}Cargá lo mismo que escribiste en el remito.</p>
-        <div id="servicios">${htmlServicios(cli.items, b.cant)}</div>
-        <div id="lineas-serv"></div>
+        ${porLineas() ? `<p class="ayuda" style="margin:0 0 8px">${b.sistema.tipo === 'orden' ? 'Vienen los servicios de la interna; los demás se agregan' : 'Los servicios se agregan'} con "+ Agregar servicio". Cargá lo mismo que escribiste en el remito.</p>
+        <div id="serv-lineas"></div>
+        <div class="serv-km" id="serv-km">${htmlServicios(cli.items.filter(esKm), b.cant)}</div>`
+        : `<p class="ayuda" style="margin:0 0 8px">Cargá lo mismo que escribiste en el remito.</p>
+        <div id="servicios">${htmlServicios(cli.items, b.cant)}</div>`}
         <label for="f-obs">Observaciones (opcional)</label>
         <textarea id="f-obs" rows="2">${esc(b.observaciones)}</textarea>
       </section>
@@ -329,62 +351,101 @@ export async function vistaNuevo(vista) {
       </section>` : ''}
 
       <div id="errores"></div>
+      ${porLineas() && envioDirecto() ? '<p class="ayuda" style="text-align:center">Seguridad eléctrica: al enviarlo va directo al sistema (ALO Manager) con la foto; no pasa por la revisión de la app ni por el Excel.</p>' : ''}
       <button class="primario grande ancho" id="btn-enviar">${b.itemId ? 'Reenviar corregido' : 'Enviar remito'}</button>
       <div class="acciones"><button id="btn-descartar" class="peligro">Descartar</button></div>`;
 
     pintarFotos();
     conectar();
+    pintarServicios();
     pintarPorServicio();
   }
 
-  // Servicios cargados (sin km); lo que depende de ellos se redibuja cuando cambia este conjunto
-  const serviciosCargados = () => (conSistema && deSistema(b) ? clienteActual(b).items.filter(i => !esKm(i) && +b.cant[i.cod] > 0) : []);
+  // Con empresa del sistema los servicios se cargan por línea (pestañas) y los km aparte, uno solo
+  const porLineas = () => Boolean(conSistema && deSistema(b));
+  const clavesLinea = () => (lineasDe(b).length ? lineasDe(b) : ['']);
+
+  function pintarServicios() {
+    const cont = $('#serv-lineas', vista);
+    if (!cont) return;
+    const cat = estado.sistema.catalogos;
+    const lineas = lineasDe(b);
+    if (lineas.length && !lineas.includes(b.lineaActiva)) b.lineaActiva = lineas[0];
+    const activa = lineas.length ? b.lineaActiva : '';
+    const cant = (b.cantLinea[activa] ||= {});
+    const servicios = clienteActual(b).items.filter(i => !esKm(i));
+    const faltaLinea = !lineas.length && lineasDeEmpresa(cat, b.sistema.empresaId).length;
+    cont.innerHTML = `
+      ${lineas.length ? htmlPestanasLineas(lineas.map(id => ({ id, nombre: nombreDeLinea(id) })), activa, b.cantLinea) : ''}
+      ${faltaLinea ? '<p class="mensaje alerta" style="margin:0 0 8px">Agregá la línea en "Trabajo" para asignarle los servicios.</p>' : ''}
+      ${lineas.length ? `<label for="f-operadora">Operadora</label>
+        <select id="f-operadora"><option value="">Elegir…</option>${cat.operadoras.map(o => `<option value="${esc(o.id)}" ${mismoId(o.id, b.sistema.operadorasPorLinea[activa]) ? 'selected' : ''}>${esc(o.nombre)}</option>`).join('')}</select>` : ''}
+      <div id="servicios">${servicios.length ? htmlServicios(servicios, cant) : '<p class="ayuda" style="margin:8px 0 0">Todavía no hay servicios: tocá su abreviatura abajo para agregarlos.</p>'}</div>
+      ${htmlAgregarServicio(!servicios.length || b.panelServAbierto)}`;
+    // Pestañas: delegado en el contenedor (se asigna, no se suma, porque el contenedor se reutiliza)
+    cont.onclick = e => {
+      const tab = e.target.closest('[data-linea]');
+      if (!tab) return;
+      b.lineaActiva = tab.dataset.linea;
+      guardarBorrador(false);
+      pintarServicios();
+    };
+    $('#f-operadora', cont)?.addEventListener('change', e => {
+      b.sistema.operadorasPorLinea[activa] = e.target.value;
+      sincronizarLinea(b.sistema);
+      guardarBorrador();
+    });
+    conectarServicios($('#servicios', cont), cant, () => {
+      guardarBorrador();
+      // Cantidad de servicios de la pestaña
+      const tab = cont.querySelector(`[data-linea="${CSS.escape(activa)}"]`);
+      if (tab) {
+        const n = Object.values(cant).filter(v => +v > 0).length;
+        tab.querySelector('.contador')?.remove();
+        if (n) tab.insertAdjacentHTML('beforeend', ` <span class="contador">${n}</span>`);
+      }
+      pintarPorServicio(false);
+    });
+    conectarAgregarServicio(cont.querySelector('.agregar-servicio'),
+      () => serviciosDelSector(cat, b.sistema.sectorId).filter(x => !servicios.some(y => mismoId(y.servicioId, x.servicioId))),
+      it => {
+        b.panelServAbierto = true;
+        if (!servicios.some(x => mismoId(x.servicioId, it.servicioId))) b.servExtra.push(it);
+        const cod = servicios.find(x => mismoId(x.servicioId, it.servicioId))?.cod || it.cod;
+        cant[cod] = (+cant[cod] || 0) + 1;
+        guardarBorrador();
+        pintarServicios();
+        pintarPorServicio();
+      });
+  }
+
+  // Un bloque de materiales por cada servicio cargado que los lleva, en cada línea
+  function serviciosConMateriales() {
+    if (!porLineas()) return [];
+    const items = clienteActual(b).items;
+    return clavesLinea().flatMap(l => items.filter(i => i.materiales && +b.cantLinea[l]?.[i.cod] > 0)
+      .map(item => ({ linea: l, item, clave: claveMaterial(l, item.servicioId) })));
+  }
+  const tituloMaterial = p => `${lineasDe(b).length > 1 ? nombreDeLinea(p.linea) + ' · ' : ''}${etiquetaServicio(p.item)}`;
+
+  // Lo que depende de los servicios cargados se redibuja solo cuando cambia ese conjunto
   let firmaServicios = '';
   function pintarPorServicio(forzar = true) {
-    const firma = serviciosCargados().map(i => i.cod).join('|');
+    const firma = serviciosConMateriales().map(p => p.clave).join(',');
     if (!forzar && firma === firmaServicios) return;
     firmaServicios = firma;
-    pintarLineasServicio();
     pintarMateriales();
   }
 
-  // Con varias líneas: a qué línea pertenece cada servicio cargado
-  function pintarLineasServicio() {
-    const cont = $('#lineas-serv', vista);
-    if (!cont) return;
-    if (!variasLineas(b)) { cont.innerHTML = ''; return; }
-    const cat = estado.sistema.catalogos;
-    const servs = serviciosCargados();
-    cont.innerHTML = servs.length ? `<h3 style="margin:10px 0 4px">¿A qué línea pertenece cada servicio?</h3>${servs.map(i => `
-      <label for="ls-${esc(i.cod)}">${esc(i.servicio)}</label>
-      <select id="ls-${esc(i.cod)}" data-linea-serv="${esc(i.servicioId)}">
-        <option value="">Elegir…</option>
-        <option value="${TODAS_LAS_LINEAS}" ${b.lineaServ[i.servicioId] === TODAS_LAS_LINEAS ? 'selected' : ''}>Todas las líneas</option>
-        ${b.sistema.lineaIds.map(id => `<option value="${esc(id)}" ${mismoId(b.lineaServ[i.servicioId], id) ? 'selected' : ''}>${esc(nombreLinea(buscarPorId(cat.lineas, id)))}</option>`).join('')}
-      </select>`).join('')}` : '';
-    cont.querySelectorAll('[data-linea-serv]').forEach(sel => sel.addEventListener('change', () => {
-      const sid = sel.dataset.lineaServ;
-      b.lineaServ[sid] = sel.value;
-      // El recuperado depende de la línea: al cambiarla se vacía el de ese servicio
-      if (b.matServ[sid]) { b.matServ[sid].recuperado = {}; b.matServ[sid].reutilizado = {}; }
-      guardarBorrador(); pintarMateriales();
-    }));
-  }
-
-  // Un bloque de materiales por cada servicio cargado que los lleva
-  function serviciosConMateriales() {
-    if (!(conSistema && deSistema(b))) return [];
-    return clienteActual(b).items.filter(i => i.materiales && +b.cant[i.cod] > 0);
-  }
   function pintarMateriales() {
     const sec = $('#sec-materiales', vista);
     if (!sec) return;
-    const servs = serviciosConMateriales();
-    sec.hidden = !servs.length;
+    const pares = serviciosConMateriales();
+    sec.hidden = !pares.length;
     const cont = $('#materiales', vista);
-    cont.innerHTML = servs.map((i, n) => `<div class="bloque-material" data-serv="${esc(i.servicioId)}">
-      <h3 style="margin:8px 0 4px">${esc(i.servicio)}${i.codigo ? ` <small>(${esc(i.codigo)})</small>` : ''}</h3>
-      ${htmlMateriales(b.matServ[i.servicioId] ||= materialesVacios(), opcionesMateriales(b, i.servicioId), `m${n}`)}</div>`).join('');
+    cont.innerHTML = pares.map((p, n) => `<div class="bloque-material" data-serv="${esc(p.clave)}">
+      <h3 style="margin:8px 0 4px">${esc(tituloMaterial(p))} <small>${esc(p.item.servicio)}</small></h3>
+      ${htmlMateriales(b.matServ[p.clave] ||= materialesVacios(), opcionesMateriales(b, p.linea), `m${n}`)}</div>`).join('');
     cont.querySelectorAll('[data-serv]').forEach(bloque => {
       const m = b.matServ[bloque.dataset.serv];
       conectarMateriales(bloque, m, redibujar => { guardarBorrador(); if (redibujar) pintarMateriales(); });
@@ -502,28 +563,43 @@ export async function vistaNuevo(vista) {
       $('#zona', vista).innerHTML = est ? `Zona <span class="chip">${esc(est.zona)}</span>` : '';
       guardarBorrador();
     });
-    conectarServicios($('#servicios', vista), b.cant, () => {
-      guardarBorrador();
-      // Aparecen o desaparecen la línea y los materiales del servicio
-      pintarPorServicio(false);
-    });
+    if (porLineas()) conectarServicios($('#serv-km', vista), b.cant, () => guardarBorrador());
+    else conectarServicios($('#servicios', vista), b.cant, () => guardarBorrador());
     if (conSistema) {
-
       on('#f-empresa', 'change', e => {
-        Object.assign(b.sistema, { empresaId: e.target.value, lineaId: '', operadoraId: '' });
-        b.matServ = {};
+        Object.assign(b.sistema, { empresaId: e.target.value, lineaIds: [], operadorasPorLinea: {}, lineasAgregadas: [] });
+        sincronizarLinea(b.sistema);
         elegirClienteDeEmpresa(b); guardarBorrador(); pintar();
       });
-      on('#f-linea', 'change', e => {
-        b.sistema.lineaId = e.target.value;
-        // La operadora sale de la línea; se puede cambiar a mano
-        const l = buscarPorId(estado.sistema.catalogos.lineas, b.sistema.lineaId);
-        if (l?.operadoraId) b.sistema.operadoraId = l.operadoraId;
-        // El recuperado es de cada línea: al cambiarla se vacía
-        for (const m of Object.values(b.matServ)) { m.recuperado = {}; m.reutilizado = {}; }
+      // Agregar una línea de la empresa: si es la primera, se lleva lo cargado sin línea
+      on('#f-agregar-linea', 'change', e => {
+        const l = buscarPorId(estado.sistema.catalogos.lineas, e.target.value);
+        if (!l) return;
+        const s = b.sistema;
+        if (!s.lineaIds.length) {
+          if (b.cantLinea['']) { b.cantLinea[l.id] = b.cantLinea['']; delete b.cantLinea['']; }
+          for (const k of Object.keys(b.matServ)) if (k.startsWith('|')) { b.matServ[l.id + k] = b.matServ[k]; delete b.matServ[k]; }
+        }
+        s.lineaIds.push(l.id);
+        s.lineasAgregadas.push(l.id);
+        s.operadorasPorLinea[l.id] = l.operadoraId || '';
+        sincronizarLinea(s);
+        b.lineaActiva = l.id;
         guardarBorrador(); pintar();
       });
-      on('#f-operadora', 'change', e => { b.sistema.operadoraId = e.target.value; guardarBorrador(); });
+      vista.querySelectorAll('[data-quitar-linea]').forEach(btn => btn.addEventListener('click', () => {
+        const id = btn.dataset.quitarLinea;
+        const cargado = Object.values(b.cantLinea[id] || {}).some(v => +v > 0);
+        if (cargado && !confirm(`¿Quitar ${nombreDeLinea(id)}? Se borran los servicios cargados en esa línea.`)) return;
+        const s = b.sistema;
+        s.lineaIds = s.lineaIds.filter(x => x !== id);
+        s.lineasAgregadas = s.lineasAgregadas.filter(x => x !== id);
+        delete s.operadorasPorLinea[id];
+        delete b.cantLinea[id];
+        for (const k of Object.keys(b.matServ)) if (k.startsWith(id + '|')) delete b.matServ[k];
+        sincronizarLinea(s);
+        guardarBorrador(); pintar();
+      }));
     }
     // Cámara de la tarjeta: abre el menú Sacar foto / Elegir de la galería
     const menu = $('#menu-foto', vista);
@@ -547,8 +623,16 @@ export async function vistaNuevo(vista) {
   }
 
   // Ítems cargados según el catálogo del cliente
-  const itemsCargados = () => itemsDeCantidades(clienteActual(b).items, b.cant)
-    .map(i => (variasLineas(b) && i.servicioId && b.lineaServ[i.servicioId] ? { ...i, lineaId: b.lineaServ[i.servicioId] } : i));
+  // Con líneas, cada ítem lleva la línea de su pestaña (el mismo servicio puede ir en varias); los km, uno solo
+  const itemsCargados = () => {
+    const items = clienteActual(b).items;
+    if (!porLineas()) return itemsDeCantidades(items, b.cant);
+    return [...itemsDeLineas(items, b.cantLinea, lineasDe(b)), ...itemsDeCantidades(items.filter(esKm), b.cant)];
+  };
+
+  // Remito de Seguridad eléctrica con empresa del sistema: se envía directo a la tabla intermedia
+  const envioDirecto = () => porLineas() && intermediaActiva()
+    && esSectorElectrico(b.sistema.sectorId || estado.sistema.usuario.sectorId, estado.sistema.ref);
 
   const validar = () => {
     const err = validarCarga(b, clienteActual(b), {
@@ -558,12 +642,9 @@ export async function vistaNuevo(vista) {
       // Solo el remito de una interna exige empresa y línea; el remito nuevo sigue como siempre
       if (b.sistema.tipo === 'orden') {
         if (!b.sistema.empresaId) err.unshift('Elegí la empresa.');
-        else if (variasLineas(b)) {
-          const sinLinea = serviciosCargados().filter(i => !b.lineaServ[i.servicioId]);
-          if (sinLinea.length) err.unshift(`Elegí a qué línea pertenece: ${sinLinea.map(i => i.servicio).join(', ')}.`);
-        } else if (!b.sistema.lineaId && lineasPosibles(b).length) err.unshift('Elegí la línea.');
+        else if (!lineasDe(b).length && lineasDeEmpresa(estado.sistema.catalogos, b.sistema.empresaId).length) err.unshift('Agregá la línea del trabajo.');
       }
-      for (const i of serviciosConMateriales()) err.push(...validarMateriales(b.matServ[i.servicioId]).map(e => `${i.servicio}: ${e}`));
+      for (const p of serviciosConMateriales()) err.push(...validarMateriales(b.matServ[p.clave]).map(e => `${tituloMaterial(p)}: ${e}`));
     }
     return err;
   };
@@ -614,8 +695,9 @@ export async function vistaNuevo(vista) {
           observaciones: b.observaciones.trim(),
           // IDs del sistema principal (Dataverse) y materiales; sin sistema quedan vacíos
           ...(conSistema ? {
-            sistema: { ...b.sistema, tecnicoId: estado.sistema.usuario.id },
-            materiales: filasMaterialesPorServicio(b.matServ, estado.sistema.catalogos, serviciosConMateriales().map(i => i.servicioId)),
+            // Seguridad eléctrica (por GUID del sector): va directo a Dataverse y la foto a SharePoint, sin Excel
+            sistema: { ...b.sistema, tecnicoId: estado.sistema.usuario.id, directo: envioDirecto() },
+            materiales: filasMaterialesPorClave(b.matServ, estado.sistema.catalogos, serviciosConMateriales().map(p => p.clave)),
           } : {}),
         },
         pdf: b.paginas.length ? await armarPdf(b.paginas) : null,

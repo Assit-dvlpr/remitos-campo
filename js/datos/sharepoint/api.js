@@ -63,7 +63,7 @@ export const api = {
     return (await remitosDonde('Remito', nro))[0] || null;
   },
 
-  // e = { idLocal, itemId?, datos, pdf? }
+  // e = { idLocal, itemId?, datos, pdf? } -> lo guardado en la lista, con su id
   async enviarRemito(e) {
     const d = e.datos;
     const existente = await this.buscarRemito(d.remito);
@@ -83,9 +83,10 @@ export const api = {
       const campos = aCampos(datos);
       if (!e.pdf) { delete campos.ArchivoId; delete campos.ArchivoUrl; }
       await g(`${lista}/items/${id}/fields`, { method: 'PATCH', body: campos });
-    } else {
-      await g(`${lista}/items`, { method: 'POST', body: { fields: aCampos(datos) } });
+      return { ...existente, ...datos, id };
     }
+    const it = await g(`${lista}/items`, { method: 'POST', body: { fields: aCampos(datos) } });
+    return { ...datos, id: it.id };
   },
 
   async misRemitos(email) {

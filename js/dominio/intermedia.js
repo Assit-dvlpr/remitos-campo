@@ -34,7 +34,11 @@ export function itemsParaExcel(items, catalogoCliente) {
   for (const i of items || []) {
     if (esKm(i)) { salida.push(i); continue; }
     const c = (catalogoCliente || []).find(x => idDv(x.servicioId) && idDv(x.servicioId) === idDv(i.servicioId));
-    if (c) salida.push({ ...i, cod: c.cod, servicio: c.servicio }); else if (+i.cant > 0) sinVincular.push(i);
+    if (!c) { if (+i.cant > 0 && !sinVincular.some(x => x.cod === i.cod)) sinVincular.push(i); continue; }
+    // El mismo servicio en varias líneas va sumado a la planilla (una fila por código)
+    const ya = salida.find(x => !esKm(x) && String(x.cod) === String(c.cod));
+    if (ya) ya.cant = +ya.cant + +i.cant;
+    else { const { lineaId, ...resto } = i; salida.push({ ...resto, cod: c.cod, servicio: c.servicio }); }
   }
   return { items: salida, sinVincular };
 }

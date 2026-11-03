@@ -59,7 +59,11 @@ export async function procesarCola(api, alCambiar) {
     for (const e of await cola.todos()) {
       if (e.estado === 'duplicado') continue;
       try {
-        await api.enviarRemito(e);
+        const guardado = await api.enviarRemito(e);
+        if (e.datos?.sistema?.directo) {
+          const { enviarDirecto } = await import('./intermedia.js');
+          await enviarDirecto(api, e, guardado);
+        }
         await cola.quitar(e.idLocal);
       } catch (err) {
         e.intentos = (e.intentos || 0) + 1;

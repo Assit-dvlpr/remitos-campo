@@ -4,21 +4,26 @@ import { estado, recordar } from '../../../nucleo/estado.js';
 import { CODIGOS, ESTADOS, QUIEN } from '../../../nucleo/constantes.js';
 import { esc } from '../../../nucleo/texto.js';
 import { completarAutomaticos } from '../../../dominio/extras.js';
-import { buscarEstablecimiento } from '../../../dominio/catalogo.js';
+import { buscarEstablecimiento, esKm } from '../../../dominio/catalogo.js';
 import {
-  normalizarRemito, partesRemito, itemsDeCantidades, cantidadesDeItems, kilometros, faltantesAprobacion,
+  normalizarRemito, partesRemito, itemsDeCantidades, cantidadesDeItems, kilometros, faltantesAprobacion, itemsDeLineas, cantidadesPorLinea,
 } from '../../../dominio/remito.js';
 import { $, aviso } from '../../dom.js';
 import { ir } from '../../navegacion.js';
-import { htmlServicios, conectarServicios } from '../../componentes/servicios.js';
+import { htmlServicios, conectarServicios, htmlAgregarServicio, conectarAgregarServicio } from '../../componentes/servicios.js';
 import { htmlSelectExtra, htmlAutomaticos, leerSelectsExtra } from '../../componentes/extras.js';
 import { htmlResumenMateriales } from '../../componentes/materiales.js';
-import { resumenSistema, clienteDelSistema, buscarPorId, nombreLinea } from '../../../dominio/sistema.js';
+import {
+  resumenSistema, clienteDelSistema, buscarPorId, nombreLinea, serviciosDelSector,
+} from '../../../dominio/sistema.js';
 import { intermediaActiva, publicarPendiente, publicarAprobado } from '../../../datos/intermedia.js';
 import { conServicios, itemsSinServicio, itemsParaExcel, semillaRemito, nombreArchivoSistema } from '../../../dominio/intermedia.js';
 import { guidEstable } from '../../../nucleo/ids.js';
 
 let urlPdf = null;
+
+const nombreDeLinea = id => nombreLinea(buscarPorId(estado.sistema?.catalogos?.lineas, id)) || 'Línea';
+const lineasDelRemito = s => ((s?.lineaIds || []).length ? s.lineaIds : (s?.lineaId ? [s.lineaId] : []));
 
 // Interna, empresa, línea y materiales que cargó el técnico (solo lectura; la oficina los usa al pasarlo al sistema)
 function htmlTrabajo(r) {
@@ -30,11 +35,8 @@ function htmlTrabajo(r) {
     ${s ? (s.tipo === 'orden'
       ? dato('Interna', s.interna || 'Interna (no está en los catálogos cargados)') + dato('Solicitud', s.solicitud)
       : '<p class="ayuda" style="margin:0">Remito nuevo, sin interna.</p>')
-      + dato('Empresa', s.empresa) + dato(r.sistema.lineaIds?.length > 1 ? 'Líneas' : 'Línea', s.linea) + dato('Operadora', s.operadora) + dato('Sector', s.sector)
-      + (r.sistema.lineaIds?.length > 1 ? `<span class="etiqueta">Línea de cada servicio</span><ul style="margin:0 0 6px;padding-left:18px">${(r.items || [])
-        .filter(i => i.servicioId).map(i => `<li>${esc(i.servicio)}: ${esc(i.lineaId === '*' ? 'todas las líneas'
-          : nombreLinea(buscarPorId(estado.sistema?.catalogos?.lineas, i.lineaId)) || 'sin elegir')}</li>`).join('')}</ul>` : '') : ''}
-    ${r.materiales?.length ? `<h2 style="margin-top:10px">Materiales</h2>${htmlResumenMateriales(r.materiales, r.items)}` : ''}
+      + dato('Empresa', s.empresa) + dato(r.sistema.lineaIds?.length > 1 ? 'Líneas' : 'Línea', s.linea) + dato('Operadora', s.operadora) + dato('Sector', s.sector) : ''}
+    ${r.materiales?.length ? `<h2 style="margin-top:10px">Materiales</h2>${htmlResumenMateriales(r.materiales, r.items, nombreDeLinea)}` : ''}
   </section>`;
 }
 
@@ -45,7 +47,7 @@ export async function vistaDetalle(vista, id) {
   if (!r) { vista.innerHTML = '<div class="mensaje alerta">Ese remito ya no está pendiente.</div><a href="#revision" class="boton">Volver</a>'; return; }
   // Remito con empresa del sistema: servicios por GUID; el Excel solo si esa empresa tiene uno vinculado
   const cli = r.sistema?.empresaId
-    ? clienteDelSistema(estado.sistema?.catalogos, r.sistema, estado.clientes, r.items)
+    ? clienteDelSistema(estado.sistema?.catalogos, r.sistema, estado.clientes, r.items, { soloInterna: true })
     : estado.clientes?.[r.cliente];
   const cliExcel = cli?.sistema ? estado.clientes?.[cli.claveExcel] || null : cli;
   if (!cli) { vista.innerHTML = `<div class="mensaje error">El cliente "${esc(r.cliente)}" no está configurado.</div>`; return; }
@@ -55,6 +57,9 @@ export async function vistaDetalle(vista, id) {
   if (!r.fechaSolicitud) r.fechaSolicitud = recordar('ultimaFechaSolicitud') || '';
   if (!r.periodo) r.periodo = recordar('ultimoPeriodo') || r.fechaRemito.slice(0, 7);
   const cant = cantidadesDeItems(r.items);
+  // Remito del sistema: servicios por línea (el mismo servicio puede estar en varias) y los km aparte
+  const lineas = cli.sistema ? lineasDelRemito(r.sistema) : [];
+  const cantLinea = cli.sistema ? cantidadesPorLinea(r.items, lineas) : {};
   const [pv, numero] = partesRemito(r.remito);
 
   vista.innerHTML = `
@@ -93,7 +98,7 @@ export async function vistaDetalle(vista, id) {
         ${htmlTrabajo(r)}
         <section class="tarjeta">
           <h2>Servicios</h2>
-          <div id="servicios">${htmlServicios(cli.items, cant)}</div>
+          <div id="servicios">${cli.sistema ? '' : htmlServicios(cli.items, cant)}</div>
           ${r.observaciones ? `<label>Observaciones del técnico</label><p style="margin:0">${esc(r.observaciones)}</p>` : ''}
         </section>
         <section class="tarjeta">
@@ -113,7 +118,32 @@ export async function vistaDetalle(vista, id) {
       </div>
     </div>`;
 
-  conectarServicios($('#servicios', vista), cant);
+  // Servicios del sistema: un bloque por línea, con la lista de abreviaturas para agregar; los km, uno solo al final
+  function pintarServicios() {
+    const cont = $('#servicios', vista);
+    const servicios = cli.items.filter(i => !esKm(i));
+    const claves = lineas.length ? lineas : [''];
+    cont.innerHTML = claves.map((l, n) => `<div class="bloque-linea" data-n="${n}">
+        ${l ? `<h3 style="margin:10px 0 4px">${esc(nombreDeLinea(l))}</h3>` : ''}
+        <div class="lista">${htmlServicios(servicios, cantLinea[l])}</div>
+        ${estado.sistema?.catalogos ? htmlAgregarServicio() : ''}</div>`).join('')
+      + `<div class="serv-km" id="serv-km">${htmlServicios(cli.items.filter(esKm), cant)}</div>`;
+    claves.forEach((l, n) => {
+      const bloque = cont.querySelector(`.bloque-linea[data-n="${n}"]`);
+      conectarServicios($('.lista', bloque), cantLinea[l]);
+      const caja = bloque.querySelector('.agregar-servicio');
+      if (caja) conectarAgregarServicio(caja, () => serviciosDelSector(estado.sistema.catalogos, r.sistema.sectorId)
+        .filter(x => !servicios.some(y => y.servicioId === x.servicioId)), it => {
+        const ya = cli.items.find(x => x.servicioId && x.servicioId === it.servicioId);
+        if (!ya) cli.items.splice(cli.items.length - 1, 0, it);
+        const cod = ya?.cod || it.cod;
+        cantLinea[l][cod] = (+cantLinea[l][cod] || 0) + 1;
+        pintarServicios();
+      });
+    });
+    conectarServicios($('#serv-km', cont), cant);
+  }
+  if (cli.sistema) pintarServicios(); else conectarServicios($('#servicios', vista), cant);
   $('#f-estab', vista).addEventListener('input', e => {
     const est = buscarEstablecimiento(cli, e.target.value);
     r.zona = est?.zona || r.zona;
@@ -145,11 +175,10 @@ export async function vistaDetalle(vista, id) {
       fechaSolicitud: $('#f-solicitud', vista).value,
       periodo: $('#f-periodo', vista).value,
       establecimiento: $('#f-estab', vista).value,
-      // La línea de cada servicio la eligió el técnico; se conserva
-      items: itemsDeCantidades(cli.items, cant).map(i => {
-        const lineaId = (r.items || []).find(x => String(x.cod) === String(i.cod))?.lineaId;
-        return lineaId ? { ...i, lineaId } : i;
-      }),
+      // Con sistema, cada servicio con su línea; los km, uno solo
+      items: cli.sistema
+        ? [...itemsDeLineas(cli.items, cantLinea, lineas), ...itemsDeCantidades(cli.items.filter(esKm), cant)]
+        : itemsDeCantidades(cli.items, cant),
       km: kilometros(cli.items, cant),
       extras: leerExtras(),
       revisor: estado.usuario.displayName,

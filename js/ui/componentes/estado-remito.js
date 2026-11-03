@@ -12,5 +12,6 @@ export function claseEstado(e) {
 // Para el técnico, "Pendiente" y "Pendiente Excel" son lo mismo: está en la oficina
 const paraTecnico = e => (e === ESTADOS.PENDIENTE || e === ESTADOS.PENDIENTE_EXCEL ? 'En revisión' : e);
 
-export const chipEstado = (e, { tecnico = false } = {}) =>
-  `<span class="estado ${claseEstado(e)}">${esc(tecnico ? paraTecnico(e) : e)}</span>`;
+// directo: remito de Seguridad eléctrica que fue a Dataverse sin pasar por la revisión de la app
+export const chipEstado = (e, { tecnico = false, directo = false } = {}) =>
+  `<span class="estado ${claseEstado(e)}">${esc(directo && e === ESTADOS.APROBADO ? 'En el sistema' : tecnico ? paraTecnico(e) : e)}</span>`;

@@ -54,13 +54,21 @@ export function conectarMateriales(raiz, materiales, alCambiar) {
   });
 }
 
-// Resumen de solo lectura: filas [{ tipo, nombre, unidad, cant, servicioId }] agrupadas por servicio y tipo
-export function htmlResumenMateriales(filas, items = []) {
+// Resumen de solo lectura: filas [{ tipo, nombre, unidad, cant, servicioId, lineaId }] agrupadas por línea y servicio, y por tipo.
+// nombreDeLinea(id): para titular cada grupo cuando el remito tiene varias líneas.
+export function htmlResumenMateriales(filas, items = [], nombreDeLinea = null) {
   if (!filas?.length) return '<p class="ayuda" style="margin:0">Sin materiales cargados.</p>';
-  const servicios = [...new Set(filas.map(f => f.servicioId || ''))];
-  if (servicios.length > 1 || servicios[0]) {
-    return servicios.map(sid => `<h3 style="margin:6px 0 2px">${esc(items.find(i => i.servicioId === sid)?.servicio || 'Sin servicio')}</h3>
-      ${htmlResumenMateriales(filas.filter(f => (f.servicioId || '') === sid).map(({ servicioId, ...f }) => f))}`).join('');
+  const clave = f => `${f.lineaId || ''}|${f.servicioId || ''}`;
+  const grupos = [...new Set(filas.map(clave))];
+  if (grupos.length > 1 || grupos[0] !== '|') {
+    return grupos.map(g => {
+      const [lineaId, sid] = g.split('|');
+      const it = items.find(i => i.servicioId === sid);
+      const serv = it ? (it.codigo ? String(it.codigo).toUpperCase() : it.servicio) : 'Sin servicio';
+      const titulo = `${lineaId && nombreDeLinea ? nombreDeLinea(lineaId) + ' · ' : ''}${serv}`;
+      return `<h3 style="margin:6px 0 2px">${esc(titulo)}</h3>
+      ${htmlResumenMateriales(filas.filter(f => clave(f) === g).map(({ servicioId, lineaId: _l, ...f }) => f))}`;
+    }).join('');
   }
   return Object.entries(TIPOS_MATERIAL).map(([tipo, def]) => {
     const deTipo = filas.filter(f => f.tipo === tipo);

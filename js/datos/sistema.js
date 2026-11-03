@@ -2,7 +2,7 @@
 // Con señal lee Dataverse y guarda una copia en el celular; sin señal usa esa copia.
 import { CONFIG, MODO_DEMO, MODO_PRUEBA_DV } from '../nucleo/config.js';
 import { recordar } from '../nucleo/estado.js';
-import { buscarPorId, esSectorElectrico, usuarioHabilitado, referenciasFaltantes } from '../dominio/sistema.js';
+import { buscarPorId, esSectorElectrico, sectorElectricoDe, usuarioHabilitado, referenciasFaltantes } from '../dominio/sistema.js';
 import { catalogosGuardados } from './cola.js';
 
 export const sistemaActivo = () => MODO_DEMO || MODO_PRUEBA_DV || CONFIG.dataverse.activo;
@@ -29,8 +29,8 @@ export const guardarReferenciasPrueba = ref => recordar('referencias-prueba', re
 export let motivoSinSistema = '';
 export async function cargarSistema(email) {
   motivoSinSistema = '';
-  const ref = await referencias();
-  const faltan = referenciasFaltantes(ref);
+  const refConfig = await referencias();
+  const faltan = referenciasFaltantes(refConfig);
   // En la prueba se entra igual: sin referencias no se filtran internas ni usuarios y nadie es del sector eléctrico
   if (faltan.length && !MODO_PRUEBA_DV) {
     const e = new Error(`Falta configurar en config.js (dataverse.referencias): ${faltan.join(', ')}.`);
@@ -54,7 +54,8 @@ export async function cargarSistema(email) {
   }
   // Sin alta en el sistema principal: funcionamiento de siempre (algunos sectores trabajan así)
   if (!usuario) { motivoSinSistema = `Tu cuenta (${email}) no está en General Usuario de Dataverse.`; return null; }
-  if (!usuarioHabilitado(usuario, ref)) throw new Error(`Tu usuario del sistema principal está "${usuario.estado}". Pedile al administrador que lo habilite.`);
+  if (!usuarioHabilitado(usuario, refConfig)) throw new Error(`Tu usuario del sistema principal está "${usuario.estado}". Pedile al administrador que lo habilite.`);
   const sector = buscarPorId(catalogos.sectores, usuario.sectorId);
+  const ref = { ...refConfig, sectorElectricoId: refConfig.sectorElectricoId || sectorElectricoDe(catalogos.sectores)?.id || '' };
   return { usuario, sector, electrico: esSectorElectrico(usuario.sectorId, ref), catalogos, ref, sinSenal, faltan };
 }

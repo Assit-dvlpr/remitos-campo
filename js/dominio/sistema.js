@@ -17,6 +17,10 @@ export const internaCerrada = (orden, ref) => valorEn(ref?.internaEstadosCerrado
 // El sector eléctrico es el configurado por su GUID
 export const esSectorElectrico = (sectorId, ref) => mismoId(sectorId, ref?.sectorElectricoId);
 
+// Si no está configurado, se toma una vez de la tabla de sectores (General Sectores) y desde ahí se decide por su GUID
+export const sectorElectricoDe = sectores => (sectores || []).find(s => s.activo !== false
+  && (['elec', 'se'].includes(etiqueta(s.codigo)) || etiqueta(s.nombre) === 'seguridadelectrica')) || null;
+
 // Solo entran los usuarios cuyo estado está en la lista de habilitados (un estado nuevo no deja entrar)
 // Sin lista configurada no se filtra (el acceso ya lo controlan Entra y los roles de Dataverse)
 export const usuarioHabilitado = (u, ref) => Boolean(u) && (!ref?.usuarioEstadosHabilitados?.length || valorEn(ref.usuarioEstadosHabilitados, u.estadoValor));
@@ -153,6 +157,28 @@ export const acompanantesPosibles = (cat, usuarioId, ref) => (cat.usuarios || []
 export const ITEM_KM = Object.freeze({ cod: 'KM', servicio: 'KILÓMETROS', planilla: false, unidad: 'km' });
 const porNombre = (a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es');
 
+// Servicio del catálogo -> ítem del remito (identificado por el GUID; "codigo" es la abreviatura: MONT, DMONT…)
+export const itemDeServicio = x => ({
+  cod: idDv(x.id), codigo: x.codigoInterno || x.codigo || '', servicio: x.nombre, servicioId: idDv(x.id), materiales: llevaMateriales(x),
+});
+
+// Catálogo para agregar servicios: los activos del sector (si el sector no tiene, todos), por abreviatura
+export function serviciosDelSector(cat, sectorId) {
+  const activos = ((cat || {}).servicios || []).filter(x => x.activo !== false);
+  const deSector = activos.filter(x => mismoId(x.sectorId, sectorId));
+  return (deSector.length ? deSector : activos).map(itemDeServicio)
+    .sort((a, b) => (a.codigo || a.servicio).localeCompare(b.codigo || b.servicio, 'es'));
+}
+
+// Busca por abreviatura (primero las que empiezan igual) o por nombre
+export function buscarServicios(lista, texto) {
+  const t = String(texto || '').trim().toLowerCase();
+  if (!t) return lista.slice();
+  const abr = i => String(i.codigo || '').toLowerCase();
+  return lista.filter(i => abr(i).includes(t) || String(i.servicio || '').toLowerCase().includes(t))
+    .sort((a, b) => Number(!abr(a).startsWith(t)) - Number(!abr(b).startsWith(t)));
+}
+
 // Servicios que se ofrecen: los de la interna; si no tiene, los del sector; si el sector no tiene, todos
 export function serviciosParaRemito(cat, sistema) {
   const c = cat || {};
@@ -167,16 +193,17 @@ export function serviciosParaRemito(cat, sistema) {
 // Cliente "virtual" de un remito del sistema. Los ítems se identifican por el GUID del servicio.
 // Si hay un cliente configurado con Excel para esa empresa, se usan sus campos y establecimientos,
 // y al aprobar también se escribe su Excel. cargados: ítems ya cargados (no se pierden si salen del catálogo).
-export function clienteDelSistema(cat, sistema, clientes, cargados = []) {
+// soloInterna: la lista base son los servicios de la interna (sin interna, vacía); el resto se agrega desde el catálogo
+export function clienteDelSistema(cat, sistema, clientes, cargados = [], { soloInterna = false } = {}) {
   const empresa = buscarPorId(cat?.empresas, sistema?.empresaId);
   const claveExcel = Object.keys(clientes || {}).find(k => mismoId(clientes[k].empresaId, sistema?.empresaId)) || '';
   const conExcel = claveExcel ? clientes[claveExcel] : null;
-  const items = serviciosParaRemito(cat, sistema).map(x => ({
-    cod: idDv(x.id), codigo: x.codigoInterno || x.codigo || '', servicio: x.nombre, servicioId: idDv(x.id), materiales: llevaMateriales(x),
-  }));
+  const base = soloInterna && !buscarPorId(cat?.ordenesInternas, sistema?.ordenId) ? [] : serviciosParaRemito(cat, sistema);
+  const items = base.map(itemDeServicio);
   for (const i of cargados || []) {
     if (i.servicioId && !items.some(x => mismoId(x.servicioId, i.servicioId))) {
-      items.push({ cod: i.cod, codigo: i.codigo || '', servicio: i.servicio, servicioId: idDv(i.servicioId), materiales: Boolean(i.materiales) });
+      const x = buscarPorId(cat?.servicios, i.servicioId);
+      items.push(x ? itemDeServicio(x) : { cod: i.cod, codigo: i.codigo || '', servicio: i.servicio, servicioId: idDv(i.servicioId), materiales: Boolean(i.materiales) });
     }
   }
   return {

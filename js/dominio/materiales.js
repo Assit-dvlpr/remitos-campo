@@ -14,6 +14,25 @@ export function filasMaterialesPorServicio(porServicio, catalogos, servicioIds) 
   return Object.entries(porServicio || {}).filter(([sid]) => !servicioIds || servicioIds.includes(sid))
     .flatMap(([servicioId, m]) => filasMateriales(m, catalogos).map(f => ({ ...f, servicioId })));
 }
+// Con líneas: { 'lineaId|servicioId': { tipo: { id: cant } } } (lineaId '' = sin línea) -> filas con servicio y línea
+export const claveMaterial = (lineaId, servicioId) => `${lineaId || ''}|${servicioId || ''}`;
+export function filasMaterialesPorClave(porClave, catalogos, claves) {
+  return Object.entries(porClave || {}).filter(([k]) => !claves || claves.includes(k))
+    .flatMap(([k, m]) => {
+      const [lineaId, servicioId] = k.split('|');
+      return filasMateriales(m, catalogos).map(f => ({ ...f, servicioId, ...(lineaId ? { lineaId } : {}) }));
+    });
+}
+// Filas -> { 'lineaId|servicioId': { tipo: { id: cant } } }
+export function materialesPorClaveDeFilas(filas) {
+  const r = {};
+  for (const f of filas || []) {
+    const m = (r[claveMaterial(f.lineaId, f.servicioId)] ||= materialesVacios());
+    if (m[f.tipo]) m[f.tipo][f.materialId] = f.cant;
+  }
+  return r;
+}
+
 // Filas -> { servicioId: { tipo: { id: cant } } } (filas sin servicio quedan bajo '')
 export function materialesPorServicioDeFilas(filas) {
   const r = {};
