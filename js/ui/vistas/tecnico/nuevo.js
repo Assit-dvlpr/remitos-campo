@@ -22,7 +22,7 @@ import { sistemaActivo } from '../../../datos/sistema.js';
 import { mismoId } from '../../../nucleo/ids.js';
 import {
   buscarPorId, empresasConLineas, acompanantesPosibles, lineasDeEmpresa, nombreLinea, materialesDeStock, materialesRecuperadosDe,
-  clienteDelSistema,
+  clienteDelSistema, identidadInterna,
 } from '../../../dominio/sistema.js';
 import { materialesVacios, filasMaterialesPorServicio, validarMateriales } from '../../../dominio/materiales.js';
 import { htmlMateriales, conectarMateriales } from '../../componentes/materiales.js';
@@ -126,7 +126,7 @@ function htmlSistema(b) {
     const o = buscarPorId(cat.ordenesInternas, s.ordenId);
     const sol = buscarPorId(cat.solicitudes, s.solicitudId);
     cabecera = `<span class="etiqueta">Interna</span>
-      <div><span class="chip">${esc(o?.numero || o?.numeroALO || 'Interna')}</span> Solicitud ${esc(sol?.numero || '')}${sol?.numeroExterno ? ' · ' + esc(sol.numeroExterno) : ''}</div>`;
+      <div><span class="chip">${esc(identidadInterna(o, buscarPorId(cat.sectores, o?.sectorId)) || 'Interna')}</span></div>`;
   }
   const empresas = s.tipo === 'orden' ? [buscarPorId(cat.empresas, s.empresaId)].filter(Boolean) : empresasConLineas(cat);
   if (s.tipo === 'nuevo') cabecera = `<p class="ayuda" style="margin:0">Remito nuevo, como hasta ahora. Empresa, línea y operadora son opcionales.</p>`;

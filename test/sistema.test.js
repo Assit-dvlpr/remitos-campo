@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  esSectorElectrico, usuarioHabilitado, ordenesAbiertas, filtrarOrdenes, lineasDeEmpresa, empresasConLineas,
+  identidadInterna, esSectorElectrico, usuarioHabilitado, ordenesAbiertas, filtrarOrdenes, lineasDeEmpresa, empresasConLineas,
   materialesDeStock, materialesRecuperadosDe, internaCerrada, referenciasFaltantes,
 } from '../js/dominio/sistema.js';
 import { lookupId, mapear, numeroNegocio } from '../js/datos/dataverse/mapeo.js';
@@ -90,7 +90,7 @@ test('resumenSistema traduce los IDs guardados a nombres', async () => {
   const { resumenSistema } = await import('../js/dominio/sistema.js');
   const o = cat.ordenesInternas[0];
   const s = resumenSistema(cat, { tipo: 'orden', ordenId: o.id, solicitudId: o.solicitudId, empresaId: cat.empresas[0].id, sectorId: SEC_ELEC });
-  assert.equal(s.interna, o.numero);
+  assert.equal(s.interna, `${o.numeroALO} - Ref. ${o.numero}`);
   assert.equal(s.empresa, cat.empresas[0].nombre);
   assert.equal(s.sector, cat.sectores[0].nombre);
   assert.equal(resumenSistema(cat, null), null);
@@ -102,4 +102,11 @@ test('N° de solicitud como en ALO Manager (GEN-año-número)', () => {
   assert.equal(numeroNegocio('GEN-2025-0007', '2026-01-01', 'GEN'), 'GEN-2025-0007');
   assert.equal(numeroNegocio('ABC-x', '2026-01-01', 'GEN'), 'ABC-x');
   assert.equal(numeroNegocio('', '2026', 'GEN'), '');
+});
+
+test('identidad de la interna como en ALO Manager', () => {
+  assert.equal(identidadInterna({ numeroALO: 'ALO-000009', numero: '1380' }), 'ALO-000009 - Ref. 1380');
+  assert.equal(identidadInterna({ numeroALO: 'ALO-000009', numero: '' }), 'ALO-000009');
+  assert.equal(identidadInterna({ numeroALO: '', numero: 'ALO-PENDIENTE-3' }), 'Número pendiente');
+  assert.equal(identidadInterna({ numeroALO: 'ALO-1', numero: '55', origenNumeracion: 'Google Sheets' }, { codigo: 'SE' }), 'ALO-1_extSE-55');
 });

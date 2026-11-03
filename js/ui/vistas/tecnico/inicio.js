@@ -3,7 +3,7 @@
 import { estado } from '../../../nucleo/estado.js';
 import { ROLES } from '../../../nucleo/constantes.js';
 import { esc } from '../../../nucleo/texto.js';
-import { ordenesAbiertas, filtrarOrdenes } from '../../../dominio/sistema.js';
+import { ordenesAbiertas, filtrarOrdenes, identidadInterna } from '../../../dominio/sistema.js';
 import { $ } from '../../dom.js';
 
 // Revisores y administradores ven las internas de todos los sectores
@@ -46,11 +46,11 @@ export function vistaInternas(vista, { alElegir, alVolver }) {
     $('#cuantas', vista).textContent = lista.length > 1 ? `${lista.length} internas, las más nuevas primero.` : '';
     const cont = $('#ordenes', vista);
     cont.scrollTop = 0;
-    // Empresa, N° de ALO Manager y referencia externa de la solicitud, y locación
+    // Empresa, N° ALO de la interna con su referencia externa (como en ALO Manager), y locación
     cont.innerHTML = lista.length ? lista.map(o => `<button type="button" class="remito-fila fila-interna" data-orden="${esc(o.id)}">
         <div class="datos">
           <div class="nro">${esc(o.empresa?.nombre || o.solicitud.empresa || 'Sin empresa')}</div>
-          <div class="sub refs">${esc(o.solicitud.numero || 'Sin N°')}${o.solicitud.numeroExterno ? ` · <b>Ref. ${esc(o.solicitud.numeroExterno)}</b>` : ''}</div>
+          <div class="sub refs"><b>${esc(identidadInterna(o, o.sector) || 'Sin número')}</b></div>
           <div class="sub">${esc(o.locacion || o.solicitud.locacion || o.solicitud.ubicacion || 'Sin locación')}</div>
         </div>
       </button>`).join('') : `<p class="vacio">${texto ? 'Ninguna interna coincide.' : 'No hay internas abiertas.'}</p>`;

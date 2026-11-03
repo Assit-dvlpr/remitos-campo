@@ -73,6 +73,20 @@ export function ordenesAbiertas(cat, { sectorId, verTodas = false, ref }) {
     .sort((a, b) => String(b.creado || '').localeCompare(String(a.creado || '')) || String(b.numero).localeCompare(String(a.numero), 'es', { numeric: true }));
 }
 
+// Identidad de la interna igual que en ALO Manager: "ALO-000009 - Ref. 1380"
+export function identidadInterna(o, sector) {
+  const alo = String(o?.numeroALO || '').trim();
+  const ref = String(o?.numero || '').trim();
+  const pendiente = ref.startsWith('ALO-PENDIENTE-');
+  if (!alo) return pendiente ? 'Número pendiente' : ref;
+  if (!ref || pendiente) return alo;
+  const codigo = String(sector?.codigo || '').trim();
+  if (['google sheets', 'sheets', 'sheet'].includes(String(o.origenNumeracion || '').trim().toLowerCase()) && /^[a-z0-9]+$/i.test(codigo)) {
+    return `${alo}_ext${codigo}-${ref}`;
+  }
+  return `${alo} - Ref. ${ref}`;
+}
+
 // Búsqueda por número de interna, de solicitud, empresa o ubicación
 export function filtrarOrdenes(ordenes, texto) {
   const t = etiqueta(texto);
@@ -119,7 +133,7 @@ export function resumenSistema(cat, sistema) {
   const sol = buscarPorId(c.solicitudes, sistema.solicitudId);
   return {
     tipo: sistema.tipo,
-    interna: orden ? orden.numero || orden.numeroALO || '' : '',
+    interna: orden ? identidadInterna(orden, buscarPorId(c.sectores, orden.sectorId)) : '',
     solicitud: sol ? [sol.numero, sol.numeroExterno].filter(Boolean).join(' · ') : '',
     empresa: buscarPorId(c.empresas, sistema.empresaId)?.nombre || '',
     linea: (sistema.lineaIds?.length > 1 ? sistema.lineaIds : [sistema.lineaId]).map(id => nombreLinea(buscarPorId(c.lineas, id))).filter(Boolean).join(' · '),
