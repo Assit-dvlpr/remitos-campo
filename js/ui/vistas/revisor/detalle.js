@@ -12,8 +12,28 @@ import { $, aviso } from '../../dom.js';
 import { ir } from '../../navegacion.js';
 import { htmlServicios, conectarServicios } from '../../componentes/servicios.js';
 import { htmlSelectExtra, htmlAutomaticos, leerSelectsExtra } from '../../componentes/extras.js';
+import { htmlResumenMateriales } from '../../componentes/materiales.js';
+import { resumenSistema } from '../../../dominio/sistema.js';
+import { intermediaActiva, publicarPendiente, publicarAprobado } from '../../../datos/intermedia.js';
+import { conServicios, itemsSinServicio, semillaRemito, nombreArchivoSistema } from '../../../dominio/intermedia.js';
+import { guidEstable } from '../../../nucleo/ids.js';
 
 let urlPdf = null;
+
+// Interna, empresa, línea y materiales que cargó el técnico (solo lectura; la oficina los usa al pasarlo al sistema)
+function htmlTrabajo(r) {
+  const s = resumenSistema(estado.sistema?.catalogos, r.sistema);
+  if (!s && !r.materiales?.length) return '';
+  const dato = (et, v) => (v ? `<div><span class="etiqueta">${et}</span> ${esc(v)}</div>` : '');
+  return `<section class="tarjeta">
+    <h2>Trabajo en el sistema</h2>
+    ${s ? (s.tipo === 'orden'
+      ? dato('Interna', s.interna || 'Interna (no está en los catálogos cargados)') + dato('Solicitud', s.solicitud)
+      : '<p class="ayuda" style="margin:0">Remito nuevo, sin interna.</p>')
+      + dato('Empresa', s.empresa) + dato('Línea', s.linea) + dato('Operadora', s.operadora) + dato('Sector', s.sector) : ''}
+    ${r.materiales?.length ? `<h2 style="margin-top:10px">Materiales</h2>${htmlResumenMateriales(r.materiales)}` : ''}
+  </section>`;
+}
 
 export async function vistaDetalle(vista, id) {
   vista.className = 'vista ancha';
@@ -63,6 +83,7 @@ export async function vistaDetalle(vista, id) {
           }).join('')}
           <p class="ayuda" id="autos"></p>
         </section>
+        ${htmlTrabajo(r)}
         <section class="tarjeta">
           <h2>Servicios</h2>
           <div id="servicios">${htmlServicios(cli.items, cant)}</div>
@@ -156,6 +177,29 @@ export async function vistaDetalle(vista, id) {
     recordar('ultimaFechaSolicitud', d.fechaSolicitud);
     recordar('ultimoPeriodo', d.periodo);
     const revision = { ...d, fechaRevision: new Date().toISOString() };
+    // Remito del sistema: primero va a la tabla intermedia como Pendiente; si eso falla no se toca el Excel
+    const alSistema = intermediaActiva() && !!revision.sistema;
+    if (alSistema) {
+      // Al sistema se pasa solo por GUID: cada ítem tiene que estar vinculado a su servicio en Configuración
+      const conIds = { ...revision, items: conServicios(revision.items, cli.items) };
+      const sinVincular = itemsSinServicio(conIds);
+      if (sinVincular.length) {
+        msg(`Falta vincular con su servicio del sistema (Configuración → ${esc(cli.nombre)}): ${sinVincular.map(i => esc(`${i.cod} ${i.servicio || ''}`)).join(', ')}.`, 'error');
+        ocupado(false); return;
+      }
+      msg('Pasando al sistema…', 'alerta');
+      try {
+        // La foto va a la carpeta común de ALO Manager, con su formato de nombre; el vínculo queda en Archivo
+        if (!conIds.sistema.archivo) {
+          const nombre = nombreArchivoSistema(conIds.remito, await guidEstable(semillaRemito(conIds)));
+          conIds.sistema = { ...conIds.sistema, archivo: await estado.api.subirAlSistema(conIds, nombre) };
+          revision.sistema = conIds.sistema;
+        }
+        await publicarPendiente(conIds, { revisorId: estado.sistema?.usuario?.id });
+      }
+      catch (e) { msg(`<b>No se pudo pasar al sistema:</b> ${esc(e.message)} El remito sigue pendiente; probá de nuevo.`, 'error'); ocupado(false); return; }
+      msg('Escribiendo en el Excel…', 'alerta');
+    }
     try {
       // Primero se guardan las correcciones; si el Excel falla, queda "Pendiente Excel" para reintentar
       await estado.api.actualizar({ ...revision, estado: ESTADOS.PENDIENTE_EXCEL, comentario: 'Pasando al Excel…' });
@@ -166,6 +210,11 @@ export async function vistaDetalle(vista, id) {
         archivoUrl = await estado.api.archivarPdf(cli, revision);
       } catch (err) {
         comentario = 'Aprobado, pero el PDF no se pudo copiar a la carpeta del cliente: ' + err.message;
+      }
+      // En el sistema pasa a Aprobado (lo que importa ALO Manager); si falla, se avisa para pasarlo a mano
+      if (alSistema) {
+        try { await publicarAprobado({ ...revision, archivoUrl }); }
+        catch (err) { comentario = [comentario, 'Aprobado, pero en el sistema quedó Pendiente: ' + err.message].filter(Boolean).join(' '); }
       }
       await estado.api.actualizar({ ...revision, estado: ESTADOS.APROBADO, comentario, filasExcel: filas, archivoUrl });
       if (comentario) aviso(comentario, 'error');
@@ -179,7 +228,9 @@ export async function vistaDetalle(vista, id) {
       ocupado(false);
       $('#btn-ya-esta', vista)?.addEventListener('click', async () => {
         const archivoUrl = await estado.api.archivarPdf(cli, revision).catch(() => revision.archivoUrl);
-        await estado.api.actualizar({ ...revision, estado: ESTADOS.APROBADO, comentario: 'Ya estaba en la planilla (no se escribió).', archivoUrl });
+        let comentario = 'Ya estaba en la planilla (no se escribió).';
+        if (alSistema) await publicarAprobado({ ...revision, archivoUrl }).catch(err => { comentario += ' En el sistema quedó Pendiente: ' + err.message; });
+        await estado.api.actualizar({ ...revision, estado: ESTADOS.APROBADO, comentario, archivoUrl });
         aviso('Marcado como aprobado.', 'ok');
         ir('revision');
       });

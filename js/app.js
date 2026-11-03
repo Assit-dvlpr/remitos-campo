@@ -5,6 +5,7 @@ import { estado, recordar } from './nucleo/estado.js';
 import { esc } from './nucleo/texto.js';
 import { procesarCola } from './datos/cola.js';
 import { verificarApi } from './datos/contrato.js';
+import { sistemaActivo, cargarSistema } from './datos/sistema.js';
 import { $ } from './ui/dom.js';
 import { mostrar, refrescarPestanas } from './ui/navegacion.js';
 
@@ -63,6 +64,18 @@ async function iniciar() {
       return;
     }
   }
+  // Sistema principal (Dataverse): un usuario deshabilitado no entra; sin alta se trabaja como siempre
+  if (sistemaActivo()) {
+    try {
+      estado.sistema = await cargarSistema(estado.usuario.email);
+    } catch (e) {
+      $('#vista').innerHTML = `<div class="mensaje error">${esc(e.message)}</div>` +
+        (estado.salir ? '<div class="acciones"><button id="btn-salir-error">Salir / cambiar de cuenta</button></div>' : '');
+      $('#btn-salir-error')?.addEventListener('click', () => estado.salir());
+      return;
+    }
+    if (estado.sistema?.catalogos.avisos?.length) console.warn('Dataverse:', estado.sistema.catalogos.avisos);
+  }
   try {
     estado.clientes = recordar('clientes', await estado.api.leerClientes());
   } catch (e) {
@@ -70,7 +83,8 @@ async function iniciar() {
     if (!estado.clientes) estado.errorClientes = e.message;
   }
 
-  $('#usuario').innerHTML = `${esc(estado.usuario.displayName)}<br><small>${esc(estado.usuario.rol)}</small>` +
+  const sector = estado.sistema?.sector?.nombre;
+  $('#usuario').innerHTML = `${esc(estado.usuario.displayName)}<br><small>${esc(estado.usuario.rol)}${sector ? ' · ' + esc(sector) : ''}</small>` +
     (estado.salir ? ` · <button id="btn-salir">Salir</button>` : '');
   $('#btn-salir')?.addEventListener('click', () => estado.salir());
 

@@ -8,6 +8,8 @@ export const METODOS = [
   'buscarRemito', 'enviarRemito', 'misRemitos', 'pendientes', 'pdf', 'actualizar',
   // Excel del cliente
   'escribirExcel', 'archivarPdf',
+  // Carpeta común de remitos de ALO Manager
+  'subirAlSistema',
   // Configuración
   'crearEstructura', 'agregarUsuario', 'urlLista', 'resolverExcel', 'leerTabla', 'leerCatalogo',
 ];

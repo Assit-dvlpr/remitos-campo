@@ -150,6 +150,24 @@ export const api = {
     return it.webUrl;
   },
 
+  // Sube el PDF del remito a la carpeta común de remitos de ALO Manager y devuelve el vínculo corto
+  // (Doc.aspx?sourcedoc=<id del archivo>), como hace ALO Manager. No crea vínculos para compartir.
+  async subirAlSistema(remito, nombre) {
+    if (!remito.archivoId) return '';
+    const blob = await descargar(await driveId(), remito.archivoId);
+    const c = CONFIG.dataverse.carpetaRemitos;
+    const sitio = await g(`/sites/${c.host}:${c.sitio}?$select=id`);
+    const drives = (await g(`/sites/${encodeURIComponent(sitio.id)}/drives?$select=id,webUrl`)).value;
+    const drive = drives.find(d => { try { const u = new URL(d.webUrl); return u.hostname === c.host && decodeURIComponent(u.pathname).replace(/\/$/, '') === c.biblioteca; } catch { return false; } });
+    if (!drive) throw new Error('No se encontró la biblioteca de remitos de ALO Manager o no tenés acceso.');
+    const carpeta = await g(`/drives/${encodeURIComponent(drive.id)}/root:/${rutaArchivo(c.carpeta)}?$select=id,folder`);
+    if (!carpeta.folder) throw new Error(`La carpeta ${c.carpeta} no está disponible.`);
+    const it = await subirArchivo(nombre, new Blob([blob], { type: 'application/pdf' }), { drive: drive.id, carpeta: carpeta.id });
+    const ids = (await g(`/drives/${encodeURIComponent(drive.id)}/items/${encodeURIComponent(it.id)}?$select=sharepointIds`)).sharepointIds;
+    if (!/^[0-9a-f-]{36}$/i.test(ids?.listItemUniqueId || '')) throw new Error('SharePoint no devolvió el identificador del archivo.');
+    return `${ids.siteUrl.replace(/\/$/, '')}/_layouts/15/Doc.aspx?sourcedoc=${ids.listItemUniqueId}`;
+  },
+
   // ---------- Configuración inicial ----------
 
   async crearEstructura(alAvanzar) {

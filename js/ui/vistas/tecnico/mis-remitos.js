@@ -6,6 +6,7 @@ import { fechaCorta } from '../../../nucleo/fechas.js';
 import { uid } from '../../../nucleo/ids.js';
 import { cola, procesarCola } from '../../../datos/cola.js';
 import { partesRemito, cantidadesDeItems } from '../../../dominio/remito.js';
+import { materialesDeFilas } from '../../../dominio/materiales.js';
 import { $ } from '../../dom.js';
 import { ir, refrescarPestanas } from '../../navegacion.js';
 import { nombreServicio } from '../../componentes/servicios.js';
@@ -71,6 +72,7 @@ export async function vistaMisRemitos(vista) {
         fechaRemito: r.fechaRemito, establecimiento: r.establecimiento, tecnico: r.tecnico,
         cant: cantidadesDeItems(r.items),
         extras: { ...(r.extras || {}) }, acompanante: '', tecnicoEditado: true,
+        sistema: r.sistema ? { ...r.sistema } : null, materiales: materialesDeFilas(r.materiales),
         observaciones: r.observaciones, paginas: [], archivoPrevio: !!r.archivoId, comentario: r.comentario,
       };
       ir('nuevo');

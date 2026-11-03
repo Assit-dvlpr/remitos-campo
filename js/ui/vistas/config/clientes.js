@@ -2,10 +2,10 @@
 import { QUIEN, ETIQUETA_QUIEN } from '../../../nucleo/constantes.js';
 import { estado, recordar } from '../../../nucleo/estado.js';
 import { esc } from '../../../nucleo/texto.js';
-import { claveDe, claveLibre } from '../../../nucleo/ids.js';
+import { claveDe, claveLibre, mismoId } from '../../../nucleo/ids.js';
 import { tablasDeExtras, resolverExtras } from '../../../dominio/extras.js';
 import {
-  CLIENTE_POR_DEFECTO, ETIQUETAS_COLUMNAS, COLUMNAS_OBLIGATORIAS, prepararItems,
+  CLIENTE_POR_DEFECTO, ETIQUETAS_COLUMNAS, COLUMNAS_OBLIGATORIAS, prepararItems, esKm,
 } from '../../../dominio/catalogo.js';
 import { $, $$, aviso } from '../../dom.js';
 
@@ -26,6 +26,11 @@ export function seccionClientes(sec, clientes) {
     let excel = actual.excel?.itemId ? actual.excel : null;
     let catalogo = actual.items ? { items: actual.items, establecimientos: actual.establecimientos || [] } : null;
     let extras = (actual.extras || []).map(d => ({ ...d }));
+    // Vínculo con el sistema principal, siempre por GUID: empresa del cliente y servicio de cada ítem
+    const cat = estado.sistema?.catalogos;
+    const opcionesId = (lista, sel, nombre = x => x.nombre) => (lista || []).filter(x => x.activo !== false)
+      .map(x => `<option value="${esc(x.id)}" ${mismoId(x.id, sel) ? 'selected' : ''}>${esc(nombre(x))}</option>`).join('');
+    const nombreServicio = s => `${s.codigo ? s.codigo + ' · ' : ''}${s.nombre}`;
     const filaExtra = d => `<div class="extra dos-col" style="border-top:1px solid var(--borde);padding-top:8px;margin-top:8px">
         <div><label>Nombre</label><input data-k="etiqueta" value="${esc(d.etiqueta || '')}" placeholder="Línea"></div>
         <div><label>Columna en la planilla</label><input data-k="columna" value="${esc(d.columna || '')}" placeholder="LÍNEA"></div>
@@ -48,6 +53,9 @@ export function seccionClientes(sec, clientes) {
         <div><label for="c-nombre">Nombre del cliente</label><input id="c-nombre" value="${esc(c.nombre)}" placeholder="Ej.: Pan American Energy"></div>
         <div><label for="c-tabla">Tabla de carga</label><input id="c-tabla" value="${esc(c.tabla)}"></div>
       </div>
+      ${cat ? `<label for="c-empresa">Empresa en el sistema</label>
+      <select id="c-empresa"><option value="">Sin vincular</option>${opcionesId(cat.empresas, actual.empresaId)}</select>
+      <p class="ayuda">Con la empresa vinculada, al elegir una interna de esa empresa el cliente se elige solo.</p>` : ''}
       <label for="c-link">Vínculo del Excel (en SharePoint/OneDrive: Compartir → Copiar vínculo)</label>
       <input id="c-link" placeholder="https://…sharepoint.com/…">
       <p class="ayuda" id="c-excel">${excel ? 'Vinculado: <b>' + esc(excel.nombre) + '</b>' : 'Sin Excel vinculado.'}</p>
@@ -85,8 +93,10 @@ export function seccionClientes(sec, clientes) {
       if (!catalogo) return;
       $('#catalogo', sec).innerHTML = `
         <p class="ayuda"><b>${catalogo.items.length}</b> ítems y <b>${catalogo.establecimientos.length}</b> establecimientos.</p>
-        <div class="tabla-scroll"><table class="tabla"><tr><th>Ítem</th><th>Servicio</th><th>A planilla</th></tr>
-        ${catalogo.items.map(i => `<tr><td>${esc(i.cod)}</td><td>${esc(i.servicio)}</td><td>${i.planilla === false ? 'No' : 'Sí'}</td></tr>`).join('')}</table></div>
+        <div class="tabla-scroll"><table class="tabla"><tr><th>Ítem</th><th>Servicio</th><th>A planilla</th>${cat ? '<th>Servicio en el sistema</th>' : ''}</tr>
+        ${catalogo.items.map(i => `<tr><td>${esc(i.cod)}</td><td>${esc(i.servicio)}</td><td>${i.planilla === false ? 'No' : 'Sí'}</td>
+          ${!cat ? '' : esKm(i) ? '<td>Va en la cabecera</td>'
+            : `<td><select data-servicio="${esc(i.cod)}"><option value="">Sin vincular</option>${opcionesId(cat.servicios, i.servicioId, nombreServicio)}</select></td>`}</tr>`).join('')}</table></div>
         ${catalogo.establecimientos.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Zona</th><th>Establecimiento</th></tr>
         ${catalogo.establecimientos.map(e => `<tr><td>${esc(e.zona)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}</table></div>` : ''}
         ${extras.length ? `<div class="tabla-scroll" style="margin-top:8px"><table class="tabla"><tr><th>Campo</th><th>Columna</th><th>Lo completa</th><th>Valores</th></tr>
@@ -139,6 +149,8 @@ export function seccionClientes(sec, clientes) {
         // Kilómetros: si el cliente los factura como ítem (ej. "KM RECORRIDO"), se usa ese y va a la planilla;
         // si no, se agrega uno propio que solo queda registrado en el remito
         prepararItems(catalogo.items);
+        // El vínculo de cada ítem con su servicio del sistema se conserva al volver a leer el Excel
+        for (const it of catalogo.items) it.servicioId = (actual.items || []).find(x => String(x.cod) === String(it.cod))?.servicioId || '';
         // Campos adicionales: opciones y valores automáticos desde las tablas del Excel
         const defs = leerExtras();
         if (defs.length) {
@@ -165,11 +177,17 @@ export function seccionClientes(sec, clientes) {
       if (faltan.length) { aviso('Faltan columnas obligatorias: ' + faltan.join(', '), 'error'); return; }
       // Un cliente nuevo toma una clave del nombre, sin pisar otro existente
       const k = clave || claveLibre(nombre, clientes);
+      // Servicio del sistema elegido para cada ítem (GUID)
+      const items = catalogo.items.map(i => {
+        const sel = $(`[data-servicio="${CSS.escape(String(i.cod))}"]`, sec);
+        return sel ? { ...i, servicioId: sel.value } : i;
+      });
       const nuevos = {
         ...clientes,
         [k]: {
           nombre,
-          items: catalogo.items,
+          items,
+          empresaId: $('#c-empresa', sec)?.value ?? actual.empresaId ?? '',
           establecimientos: catalogo.establecimientos,
           lectura: lectura(),
           excel: { ...(excel || {}), tabla: $('#c-tabla', sec).value.trim(), columnas },

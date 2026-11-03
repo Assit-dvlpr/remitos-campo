@@ -7,6 +7,17 @@ import { sitioId, listaId } from './sitio.js';
 // Fechas sin hora: se guardan al mediodía UTC para que no cambien de día por la zona horaria
 const fechaLista = iso => (iso ? iso + 'T12:00:00Z' : null);
 
+// Columna Items: sin datos extra, la lista de ítems sola (formato original); si hay campos adicionales,
+// IDs del sistema principal o materiales, un objeto { items, extras?, sistema?, materiales? }
+const conDatos = v => (Array.isArray(v) ? v.length > 0 : !!v && Object.keys(v).length > 0);
+function itemsJson(r) {
+  const extra = {};
+  if (conDatos(r.extras)) extra.extras = r.extras;
+  if (conDatos(r.sistema)) extra.sistema = r.sistema;
+  if (conDatos(r.materiales)) extra.materiales = r.materiales;
+  return JSON.stringify(Object.keys(extra).length ? { items: r.items || [], ...extra } : r.items || []);
+}
+
 // Remito de la app -> campos de la lista
 export function aCampos(r) {
   return {
@@ -20,8 +31,7 @@ export function aCampos(r) {
     Periodo: r.periodo || '',
     Tecnico: r.tecnico,
     TecnicoEmail: r.tecnicoEmail,
-    // Con campos adicionales se guarda { items, extras }; sin ellos, la lista de ítems sola (formato original)
-    Items: JSON.stringify(r.extras && Object.keys(r.extras).length ? { items: r.items || [], extras: r.extras } : r.items || []),
+    Items: itemsJson(r),
     Kilometros: +r.km || 0,
     Observaciones: r.observaciones || '',
     Estado: r.estado,
@@ -38,10 +48,10 @@ export function aCampos(r) {
 // Ítem de la lista -> remito de la app
 export function deItem(it) {
   const f = it.fields;
-  let items = [], extras = {};
+  let items = [], extras = {}, sistema = null, materiales = [];
   try {
     const j = JSON.parse(f.Items || '[]');
-    if (Array.isArray(j)) items = j; else ({ items = [], extras = {} } = j);
+    if (Array.isArray(j)) items = j; else ({ items = [], extras = {}, sistema = null, materiales = [] } = j);
   } catch { /* vacío */ }
   return {
     id: it.id,
@@ -56,6 +66,8 @@ export function deItem(it) {
     tecnicoEmail: f.TecnicoEmail,
     items,
     extras,
+    sistema,
+    materiales,
     km: f.Kilometros || 0,
     observaciones: f.Observaciones || '',
     estado: f.Estado,

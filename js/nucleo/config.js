@@ -3,7 +3,7 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.4.0',
+  version: '1.5.0',
 
   // Microsoft Entra (registro de la app, tipo SPA)
   tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
@@ -16,6 +16,32 @@ export const CONFIG = {
   sitio: {
     host: 'alongercomar.sharepoint.com',
     ruta: '/sites/RemitosCampo',
+  },
+
+  // Dataverse del sistema principal (ALO Manager). Las tablas del sistema solo se leen.
+  // El permiso real lo da el rol de seguridad de Dataverse de cada usuario.
+  // activo: leer catálogos (false hasta que en Entra esté el permiso de Dynamics CRM y el rol de lectura).
+  // escribir: al aprobar, pasar el remito a la tabla intermedia "Remito de campo" (única tabla que se escribe),
+  //   de donde lo importa ALO Manager. false hasta que la tabla exista y los revisores tengan el rol.
+  // En modo demostración siempre se usa, con datos inventados.
+  dataverse: {
+    activo: false,
+    escribir: false,
+    url: 'https://orgb73a9f30.crm2.dynamics.com',
+    // Las decisiones se toman por GUID o por el valor numérico de cada opción, nunca por el texto.
+    // Se completan una vez, leyendo el entorno (ver la especificación). Vacío = la app no arranca con Dataverse.
+    referencias: {
+      sectorElectricoId: '',             // GUID del sector Seguridad eléctrica (cr1d0_generalsectores)
+      internaEstadosCerrados: [],        // valores de cr1d0_estadooperativo que no admiten remitos (Finalizada, Cancelada…)
+      usuarioEstadosHabilitados: [],     // valores de cr1d0_estado del usuario que dejan entrar (Activo)
+    },
+    // Carpeta común de remitos de ALO Manager: ahí va la foto del remito aprobado, con el mismo formato de nombre
+    carpetaRemitos: { host: 'alongercomar.sharepoint.com', sitio: '/sites/ALOManager', biblioteca: '/sites/ALOManager/Documentos compartidos', carpeta: 'Remitos' },
+    // Valores de las opciones de la tabla intermedia (se ven al crear la columna en Power Apps)
+    intermedia: {
+      estado: { pendiente: 159370000, aprobado: 159370003 }, // Rechazado 159370001 y Revisado 159370002 los usa ALO Manager
+      tipo: { servicio: 159370000, stock: 159370001, reutilizado: 159370002, recuperado: 159370003 },
+    },
   },
 
   // Nombres de listas y biblioteca que crea la pantalla de Configuración

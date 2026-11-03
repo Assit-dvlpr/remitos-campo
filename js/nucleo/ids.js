@@ -15,3 +15,17 @@ export function claveLibre(nombre, existentes) {
   for (let i = 2; existentes[k]; i++) k = base + '-' + i;
   return k;
 }
+
+// GUID de Dataverse en minúsculas y sin llaves: es la forma con la que se comparan los IDs en toda la app
+export const idDv = v => String(v || '').trim().replace(/[{}]/g, '').toLowerCase();
+export const mismoId = (a, b) => Boolean(idDv(a)) && idDv(a) === idDv(b);
+
+// GUID que siempre sale igual para el mismo texto (SHA-1, formato UUID v5). Sirve para que reintentar
+// una escritura en Dataverse actualice el mismo registro en vez de crear uno nuevo.
+export async function guidEstable(texto) {
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(String(texto))));
+  h[6] = (h[6] & 0x0f) | 0x50;
+  h[8] = (h[8] & 0x3f) | 0x80;
+  const x = [...h.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
+}

@@ -38,12 +38,14 @@ function tablaInicial() {
 export const CLIENTES_DEMO = {
   demo: {
     nombre: 'Cliente Demo',
+    empresaId: '00000000-0000-0000-0000-000000000001', // "Cliente Demo" en los catálogos demo del sistema
     items: [
-      { cod: 10, servicio: 'CALIDAD DE AIRE', planilla: true },
+      // servicioId: servicio del sistema (GUID) al que corresponde cada ítem de la planilla
+      { cod: 10, servicio: 'CALIDAD DE AIRE', planilla: true, servicioId: '00000000-0000-0000-0000-000000000060' },
       { cod: 20, servicio: 'ESTUDIO DE VENTILACIÓN', planilla: true },
       { cod: 30, servicio: 'ANALISIS DE CALIDAD DE AGUA', planilla: true },
-      { cod: 40, servicio: 'MEDICIONES DE NIVEL SONORO', planilla: true },
-      { cod: 50, servicio: 'ILUMINACION', planilla: true },
+      { cod: 40, servicio: 'MEDICIONES DE NIVEL SONORO', planilla: true, servicioId: '00000000-0000-0000-0000-000000000062' },
+      { cod: 50, servicio: 'ILUMINACION', planilla: true, servicioId: '00000000-0000-0000-0000-000000000061' },
       { cod: 60, servicio: 'CARGA DE FUEGO', planilla: true },
       { cod: 'KM', servicio: 'KILÓMETROS', planilla: false, unidad: 'km' },
     ],
@@ -133,6 +135,12 @@ export const api = {
     const ruta = `Remitos ${cliente.nombre}/${y}/${m}/Remito ${remito.remito} - ${cliente.nombre} - ${remito.establecimiento} - ${remito.fechaRemito}.pdf`;
     console.info('[demo] PDF archivado en:', ruta);
     return ruta;
+  },
+
+  async subirAlSistema(remito, nombre) {
+    if (!remito.archivoId) return '';
+    console.info('[demo] Archivo en la carpeta común de remitos:', nombre);
+    return `https://alongercomar.sharepoint.com/sites/ALOManager/_layouts/15/Doc.aspx?sourcedoc=demo-${remito.archivoId}`;
   },
 
   tablaDemo() { return { encabezados: ENCABEZADOS, cuerpo: leer().tabla || tablaInicial() }; },
