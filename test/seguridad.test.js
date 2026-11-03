@@ -15,6 +15,7 @@ test('el integrity de MSAL coincide con el archivo de vendor', () => {
 test('la política de contenido no permite scripts de afuera ni inline', () => {
   const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] || '';
   const script = csp.split(';').map(s => s.trim()).find(s => s.startsWith('script-src'));
-  assert.equal(script, "script-src 'self'");
+  // 'wasm-unsafe-eval' solo habilita WebAssembly (lector del N° de remito); no permite eval de JavaScript
+  assert.equal(script, "script-src 'self' 'wasm-unsafe-eval'");
   assert.match(csp, /object-src 'none'/);
 });

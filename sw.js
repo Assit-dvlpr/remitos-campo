@@ -1,6 +1,6 @@
 // Guarda la app en el celular para que abra sin señal. Solo archivos propios:
 // el login de Microsoft y SharePoint siempre van por la red.
-const VERSION = 'remitos-campo-1.5.10';
+const VERSION = 'remitos-campo-1.6.0';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'img/logo_alonger.jpg', 'img/alo.jpg',
@@ -14,7 +14,7 @@ const ARCHIVOS = [
   'js/datos/dataverse/api.js', 'js/datos/dataverse/demo.js', 'js/datos/dataverse/escritura.js',
   'js/datos/sharepoint/api.js', 'js/datos/sharepoint/http.js', 'js/datos/sharepoint/sitio.js',
   'js/datos/sharepoint/listas.js', 'js/datos/sharepoint/archivos.js', 'js/datos/sharepoint/excel.js',
-  'js/auth/auth.js', 'js/medios/fotos.js', 'js/medios/pdf.js',
+  'js/auth/auth.js', 'js/medios/fotos.js', 'js/medios/pdf.js', 'js/medios/ocr.js', 'js/dominio/ocr.js',
   'js/ui/dom.js', 'js/ui/navegacion.js',
   'js/ui/componentes/servicios.js', 'js/ui/componentes/extras.js', 'js/ui/componentes/estado-remito.js', 'js/ui/componentes/materiales.js',
   'js/ui/vistas/tecnico/inicio.js', 'js/ui/vistas/tecnico/nuevo.js', 'js/ui/vistas/tecnico/mis-remitos.js',

@@ -269,6 +269,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 /* ---------- Fotos ---------- */
 .fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.fotos:empty { display: none; }
+.tarjeta-cabecera + .fotos { margin-top: 10px; margin-bottom: 0; }
 .foto {
   position: relative;
   aspect-ratio: 3 / 4;
@@ -284,6 +286,24 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   background: rgba(0, 0, 0, .6); color: #fff; font-size: 12px; padding: 0 6px; border-radius: 6px;
 }
 .subir-foto { position: relative; overflow: hidden; }
+.tarjeta-cabecera { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tarjeta-cabecera h2 { margin: 0; }
+.btn-camara {
+  position: relative; flex: none; width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%;
+  display: grid; place-items: center; background: var(--marca); border-color: var(--marca); color: #fff;
+}
+.btn-camara .contador {
+  position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--error); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+.menu-foto {
+  position: absolute; top: 50px; right: 0; z-index: 5; display: flex; flex-direction: column; min-width: 220px;
+  background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); box-shadow: var(--sombra); overflow: hidden;
+}
+.menu-foto .subir-foto { padding: 14px 16px; cursor: pointer; font-weight: 600; }
+.menu-foto .subir-foto + .subir-foto { border-top: 1px solid var(--borde); }
+#ocr:not(:empty) { margin-top: 4px; }
+#ocr button { min-height: 0; padding: 4px 10px; margin-left: 4px; }
 .subir-foto input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
 /* ---------- Listas de remitos ---------- */

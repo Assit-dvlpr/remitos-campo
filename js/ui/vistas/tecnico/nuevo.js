@@ -227,7 +227,21 @@ export async function vistaNuevo(vista) {
       ${b.comentario ? `<div class="mensaje alerta"><b>Observación de la revisión:</b> ${esc(b.comentario)}</div>` : ''}
       ${conSistema ? `<section class="tarjeta" id="sec-sistema"><h2>Trabajo</h2>${htmlSistema(b)}</section>` : ''}
       <section class="tarjeta">
-        <h2>Datos del remito</h2>
+        <div class="tarjeta-cabecera">
+          <h2>Datos del remito</h2>
+          <button type="button" class="btn-camara" id="btn-foto" aria-haspopup="true" aria-expanded="false" title="Foto del remito firmado">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9Zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
+            ${b.paginas.length ? `<span class="contador">${b.paginas.length}</span>` : ''}
+          </button>
+          <div class="menu-foto" id="menu-foto" hidden>
+            <label class="subir-foto">📷 Sacar foto<input type="file" accept="image/*" capture="environment" id="f-camara"></label>
+            <label class="subir-foto">🖼️ Elegir de la galería<input type="file" accept="image/*" multiple id="f-galeria"></label>
+          </div>
+        </div>
+        <div class="fotos" id="fotos"></div>
+        <p class="ayuda" id="ayuda-foto" style="margin:4px 0 0">${b.paginas.length ? 'Tocá la foto para recortarla o girarla.'
+          : b.archivoPrevio ? 'Se mantiene la foto enviada antes. Sacá una nueva solo si hay que reemplazarla.'
+          : 'Con la cámara de arriba sacá la foto del remito firmado: con buena luz y el remito entero. Se lee el número solo.'}</p>
         ${claves.length > 1 ? `<label for="f-cliente">Cliente</label>
           <select id="f-cliente">${claves.map(k => `<option value="${esc(k)}" ${k === b.cliente ? 'selected' : ''}>${esc(estado.clientes[k].nombre)}</option>`).join('')}</select>`
           : `<span class="etiqueta">Cliente</span><div><span class="chip">${esc(cli.nombre)}</span>${cli.sistema
@@ -238,6 +252,7 @@ export async function vistaNuevo(vista) {
           <span class="guion">–</span>
           <input id="f-numero" inputmode="numeric" maxlength="8" placeholder="00005780" value="${esc(b.numero)}" ${b.itemId ? 'readonly' : ''}>
         </div>
+        <div id="ocr" class="ayuda" aria-live="polite"></div>
         <div class="dos-col">
           <div><label for="f-fecha">Fecha</label><input id="f-fecha" type="date" value="${esc(b.fechaRemito)}"></div>
           <div><label for="f-tecnico">Técnico</label><input id="f-tecnico" value="${esc(b.tecnico)}"></div>
@@ -272,19 +287,6 @@ export async function vistaNuevo(vista) {
         <p class="ayuda" style="margin:0 0 8px">Por cada servicio: el material nuevo de stock que se usó y el recuperado de esta empresa y línea, haya o no saldo. La app no descuenta nada; el sistema lo compara después.</p>
         <div id="materiales"></div>
       </section>` : ''}
-
-      <section class="tarjeta">
-        <h2>Foto del remito firmado</h2>
-        <div class="fotos" id="fotos"></div>
-        ${b.archivoPrevio && !b.paginas.length ? '<p class="ayuda">Se mantiene la foto enviada antes. Sacá una nueva solo si hay que reemplazarla.</p>' : ''}
-        <div class="acciones">
-          <label class="boton primario subir-foto">📷 Sacar foto
-            <input type="file" accept="image/*" capture="environment" id="f-camara"></label>
-          <label class="boton subir-foto">Elegir de la galería
-            <input type="file" accept="image/*" multiple id="f-galeria"></label>
-        </div>
-        <p class="ayuda">Con buena luz, el remito entero y la firma visible. Tocá la foto para recortarla o girarla.</p>
-      </section>
 
       <div id="errores"></div>
       <button class="primario grande ancho" id="btn-enviar">${b.itemId ? 'Reenviar corregido' : 'Enviar remito'}</button>
@@ -370,15 +372,49 @@ export async function vistaNuevo(vista) {
   }
 
   async function agregarFotos(archivos) {
+    const nuevas = [];
     for (const f of archivos) {
       try {
         const blob = await prepararFoto(f);
         const editada = await editarFoto({ blob, giro: 0, recorte: { x: 0, y: 0, w: 1, h: 1 }, mejorar: true });
-        if (editada) b.paginas.push(editada);
+        if (editada) { b.paginas.push(editada); nuevas.push(editada); }
       } catch (e) { aviso(e.message, 'error'); }
     }
     guardarBorrador();
     pintar();
+    if (nuevas.length && !b.itemId) leerNumero(nuevas[0]);
+  }
+
+  // Intenta leer el N° de remito de la foto. Si el campo está vacío lo completa; si no, lo sugiere.
+  async function leerNumero(pagina) {
+    const caja = () => $('#ocr', vista);
+    if (caja()) caja().textContent = 'Leyendo el número del remito…';
+    let leido = null;
+    try {
+      const { leerNumeroRemito } = await import('../../../medios/ocr.js');
+      // Si la foto quedó de costado, se prueba girada
+      for (const giro of [0, 90, 270]) {
+        leido = await leerNumeroRemito({ ...pagina, giro: ((pagina.giro || 0) + giro) % 360 });
+        if (leido) break;
+      }
+    } catch (e) { console.warn('OCR:', e); }
+    const c = caja();
+    if (!c) return;
+    if (!leido) { c.textContent = 'No pude leer el número en la foto; cargalo a mano.'; return; }
+    const texto = `${leido.pv}-${leido.numero}`;
+    const actual = normalizarRemito(b.pv, b.numero);
+    if (!b.numero) {
+      b.pv = leido.pv; b.numero = leido.numero; guardarBorrador();
+      $('#f-pv', vista).value = b.pv; $('#f-numero', vista).value = b.numero;
+      c.innerHTML = `Leí el N° <b>${esc(texto)}</b> en la foto. Revisalo antes de enviar.`;
+    } else if (actual !== texto) {
+      c.innerHTML = `En la foto leí <b>${esc(texto)}</b>, distinto de lo cargado. <button type="button" id="btn-usar-ocr">Usar ${esc(texto)}</button>`;
+      $('#btn-usar-ocr', vista).onclick = () => {
+        b.pv = leido.pv; b.numero = leido.numero; guardarBorrador();
+        $('#f-pv', vista).value = b.pv; $('#f-numero', vista).value = b.numero;
+        c.innerHTML = `Usando el N° <b>${esc(texto)}</b>.`;
+      };
+    } else c.innerHTML = `El N° coincide con la foto (<b>${esc(texto)}</b>).`;
   }
 
   function conectar() {
@@ -439,8 +475,12 @@ export async function vistaNuevo(vista) {
       });
       on('#f-operadora', 'change', e => { b.sistema.operadoraId = e.target.value; guardarBorrador(); });
     }
-    on('#f-camara', 'change', e => agregarFotos([...e.target.files]));
-    on('#f-galeria', 'change', e => agregarFotos([...e.target.files]));
+    // Cámara de la tarjeta: abre el menú Sacar foto / Elegir de la galería
+    const menu = $('#menu-foto', vista);
+    on('#btn-foto', 'click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; e.currentTarget.setAttribute('aria-expanded', String(!menu.hidden)); });
+    vista.addEventListener('click', e => { if (menu && !menu.hidden && !e.target.closest('#menu-foto, #btn-foto')) menu.hidden = true; });
+    on('#f-camara', 'change', e => { menu.hidden = true; agregarFotos([...e.target.files]); });
+    on('#f-galeria', 'change', e => { menu.hidden = true; agregarFotos([...e.target.files]); });
     on('#btn-enviar', 'click', enviar);
     on('#btn-descartar', 'click', async () => {
       if (!confirm('¿Descartar este remito? Se borra lo cargado.')) return;
