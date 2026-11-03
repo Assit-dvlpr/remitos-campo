@@ -3,7 +3,7 @@
 // Los datos de remitos, fotos, clientes y usuarios viven en SharePoint, nunca en este repo.
 
 export const CONFIG = {
-  version: '1.7.0',
+  version: '1.7.1',
 
   // Microsoft Entra (registro de la app, tipo SPA)
   tenantId: 'ad9b3575-dfa1-4374-83ee-797ea46ee8da',
@@ -59,4 +59,14 @@ export const MODO_DEMO =
 
 // Prueba de Dataverse (?prueba): login real y Dataverse real, pero SharePoint y los Excel simulados en el navegador.
 // Sirve para probar catálogos, internas, materiales y la tabla intermedia sin tocar las listas ni las planillas.
-export const MODO_PRUEBA_DV = !MODO_DEMO && new URLSearchParams(location.search).has('prueba');
+// Queda recordado en el celular: al abrir la app desde el ícono o al volver del login la dirección llega sin "?prueba"
+// y sin esto entraba sin Dataverse (formulario viejo, sin la pantalla inicial ni "Volver"). "?prueba=0" lo apaga.
+const CLAVE_PRUEBA = 'rc-modo-prueba';
+const pedido = new URLSearchParams(location.search).get('prueba');
+function modoPrueba() {
+  try {
+    if (pedido !== null) localStorage.setItem(CLAVE_PRUEBA, pedido === '0' ? '0' : '1');
+    return localStorage.getItem(CLAVE_PRUEBA) === '1';
+  } catch { return pedido !== null && pedido !== '0'; }
+}
+export const MODO_PRUEBA_DV = !MODO_DEMO && modoPrueba();
