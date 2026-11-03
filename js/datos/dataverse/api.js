@@ -5,9 +5,12 @@ import { mapear } from './mapeo.js';
 
 // Lo que necesita la app, en una sola lectura. Una tabla que falle no frena las demás: queda en avisos.
 const LEER = ['empresas', 'operadoras', 'yacimientos', 'lineas', 'sectores', 'servicios', 'solicitudes',
-  'solicitudServicios', 'solicitudLineas', 'ordenesInternas', 'materialesStock', 'materialesRecuperados', 'usuarios'];
+  'solicitudServicios', 'solicitudLineas', 'ordenesInternas', 'materialesStock', 'materialesRecuperados', 'movimientosRecuperado', 'usuarios'];
 // Columnas que se piden por tabla (por defecto, todas). De los usuarios solo lo necesario para elegir acompañante.
-const COLUMNAS = { usuarios: '$select=cr1d0_generalusuarioid,cr1d0_nombrecompleto,cr1d0_estado,_cr1d0_sector_value' };
+const COLUMNAS = {
+  usuarios: '$select=cr1d0_generalusuarioid,cr1d0_nombrecompleto,cr1d0_estado,_cr1d0_sector_value',
+  movimientosRecuperado: '$select=cr1d0_generalcablerecuperadomovimientoid,_cr1d0_materialreferencia_value,_cr1d0_empresa_value,_cr1d0_linea_value,cr1d0_metros,cr1d0_activo,statecode',
+};
 
 export const dataverse = {
   modo: 'dataverse',

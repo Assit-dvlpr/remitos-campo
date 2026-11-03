@@ -22,9 +22,12 @@ import { sistemaActivo } from '../../../datos/sistema.js';
 import { mismoId } from '../../../nucleo/ids.js';
 import {
   buscarPorId, empresasConLineas, acompanantesPosibles, lineasDeEmpresa, nombreLinea, materialesDeStock, materialesRecuperadosDe,
+  clienteDelSistema,
 } from '../../../dominio/sistema.js';
-import { materialesVacios, filasMateriales, validarMateriales } from '../../../dominio/materiales.js';
+import { materialesVacios, filasMaterialesPorServicio, validarMateriales } from '../../../dominio/materiales.js';
 import { htmlMateriales, conectarMateriales } from '../../componentes/materiales.js';
+import { TODAS_LAS_LINEAS } from '../../../dominio/intermedia.js';
+import { esKm } from '../../../dominio/catalogo.js';
 
 const nombreTecnico = cli => nombreEnPlanilla(cli, estado.usuario);
 
@@ -48,7 +51,10 @@ function nuevoBorrador() {
     archivoPrevio: false,
     // Con sistema principal: { tipo: 'orden'|'nuevo', ordenId, solicitudId, empresaId, lineaId, operadoraId } (null = elegir)
     sistema: null,
-    materiales: materialesVacios(),
+    // Materiales por servicio (Montaje, Desmontaje y los que requieren recuento): { servicioId: { tipo: { id: cant } } }
+    matServ: {},
+    // Con varias líneas en la interna: a qué línea va cada servicio { servicioId: lineaId | TODAS_LAS_LINEAS }
+    lineaServ: {},
   };
 }
 
@@ -63,7 +69,11 @@ function aplicarOrigen(b, origen) {
       tipo: 'orden', ordenId: o.id, solicitudId: o.solicitud.id, empresaId: o.solicitud.empresaId,
       lineaId: o.lineas.length === 1 ? o.lineas[0].id : '', operadoraId: o.lineas.length === 1 ? o.lineas[0].operadoraId : '',
       sectorId: o.sectorId || sectorId,
+      // Varias líneas: cada servicio se asigna a una o a todas; la operadora sale de cada línea
+      lineaIds: o.lineas.length > 1 ? o.lineas.map(l => l.id) : [],
+      operadorasPorLinea: o.lineas.length > 1 ? Object.fromEntries(o.lineas.map(l => [l.id, l.operadoraId || ''])) : {},
     };
+    b.lineaServ = {};
     if (!b.establecimiento && o.solicitud.ubicacion) b.establecimiento = o.solicitud.ubicacion;
   } else {
     b.sistema = { tipo: 'nuevo', ordenId: '', solicitudId: '', empresaId: '', lineaId: '', operadoraId: '', sectorId };
@@ -71,10 +81,19 @@ function aplicarOrigen(b, origen) {
   elegirClienteDeEmpresa(b);
 }
 
-// Si un cliente configurado (con su Excel) corresponde a la empresa del sistema, se elige solo
+// Con empresa del sistema, el cliente es esa empresa y los servicios salen de Dataverse (por GUID).
+// Si además hay un cliente configurado con Excel para esa empresa, queda vinculado para escribir su planilla.
+// Sin empresa (remito nuevo como hasta ahora) se usan los clientes configurados de siempre.
+const deSistema = b => Boolean(b.sistema?.empresaId);
+function clienteActual(b) {
+  if (deSistema(b) && estado.sistema) return clienteDelSistema(estado.sistema.catalogos, b.sistema, estado.clientes);
+  return estado.clientes[b.cliente];
+}
 function elegirClienteDeEmpresa(b) {
-  const k = Object.keys(estado.clientes).find(c => mismoId(estado.clientes[c].empresaId, b.sistema?.empresaId));
-  if (k && k !== b.cliente) { b.cliente = k; b.cant = {}; b.extras = {}; if (!b.tecnicoEditado) b.tecnico = nombreTecnico(estado.clientes[k]); }
+  const clave = deSistema(b) ? clienteActual(b).claveExcel : (estado.clientes[b.cliente] ? b.cliente : Object.keys(estado.clientes)[0]);
+  const marca = deSistema(b) ? `${b.sistema.empresaId}|${b.sistema.ordenId}` : '';
+  if (clave !== b.cliente || marca !== (b.marcaServicios || '')) { b.cliente = clave; b.cant = {}; b.extras = {}; b.marcaServicios = marca; }
+  if (!b.tecnicoEditado) b.tecnico = nombreTecnico(clienteActual(b));
 }
 
 // Líneas que se ofrecen: las de la interna si tiene, si no las de la empresa
@@ -88,6 +107,8 @@ function lineasPosibles(b) {
   }
   return lineasDeEmpresa(cat, b.sistema.empresaId);
 }
+
+const variasLineas = b => (b.sistema?.lineaIds || []).length > 1;
 
 function htmlSistema(b) {
   const cat = estado.sistema.catalogos;
@@ -106,18 +127,30 @@ function htmlSistema(b) {
     ${b.itemId ? '' : '<div class="acciones" style="margin-top:4px"><button type="button" id="btn-origen">Cambiar interna / remito nuevo</button></div>'}
     <label for="f-empresa">Empresa</label>
     <select id="f-empresa" ${s.tipo === 'orden' ? 'disabled' : ''}><option value="">Elegir…</option>${opt(empresas, s.empresaId)}</select>
+    ${variasLineas(b) ? `<span class="etiqueta">Líneas de la interna</span>
+      <div>${s.lineaIds.map(id => `<span class="chip">${esc(nombreLinea(buscarPorId(cat.lineas, id)))}</span>`).join(' ')}</div>
+      <p class="ayuda" style="margin:4px 0 0">En cada servicio elegís a qué línea pertenece, o a todas.</p>` : `
     <div class="dos-col">
       <div><label for="f-linea">Línea</label>
         <select id="f-linea"><option value="">Elegir…</option>${opt(lineasPosibles(b), s.lineaId, nombreLinea)}</select></div>
       <div><label for="f-operadora">Operadora</label>
         <select id="f-operadora"><option value="">Elegir…</option>${opt(cat.operadoras, s.operadoraId)}</select></div>
-    </div>`;
+    </div>`}`;
 }
 
-// Materiales disponibles por tipo, según sector, empresa y línea
-function opcionesMateriales(b) {
+// Líneas a las que va un servicio (todas si se adjunta a todas o todavía no se eligió)
+function lineasDeServicio(b, servicioId) {
+  if (!variasLineas(b)) return [b.sistema.lineaId || ''];
+  const l = b.lineaServ?.[servicioId];
+  return !l || l === TODAS_LAS_LINEAS ? b.sistema.lineaIds : [l];
+}
+
+// Materiales disponibles por tipo: stock nuevo (todos) y recuperado de la empresa y la(s) línea(s) del servicio
+function opcionesMateriales(b, servicioId) {
   const cat = estado.sistema.catalogos;
-  const rec = materialesRecuperadosDe(cat, b.sistema.empresaId, b.sistema.lineaId);
+  const lineas = lineasDeServicio(b, servicioId);
+  const rec = lineas.flatMap(l => materialesRecuperadosDe(cat, b.sistema.empresaId, l)
+    .map(m => (lineas.length > 1 ? { ...m, nombre: `${m.nombre} — ${nombreLinea(buscarPorId(cat.lineas, m.lineaId))}` } : m)));
   return { stock: materialesDeStock(cat), recuperado: rec, reutilizado: rec };
 }
 
@@ -130,9 +163,10 @@ export async function vistaNuevo(vista) {
   }
   let b = (await borrador.leer().catch(() => null)) || nuevoBorrador();
   if (estado.corregir) { b = estado.corregir; estado.corregir = null; }
-  if (!estado.clientes[b.cliente]) b.cliente = Object.keys(estado.clientes)[0];
-  b.materiales ??= materialesVacios();
+  b.matServ ??= {};
+  b.lineaServ ??= {};
   const conSistema = sistemaActivo() && estado.sistema;
+  if (!(conSistema && deSistema(b)) && !estado.clientes[b.cliente]) b.cliente = Object.keys(estado.clientes)[0];
   // Al corregir un remito cargado antes del sistema no se vuelve a la pantalla inicial: queda como remito nuevo
   if (conSistema && b.itemId && !b.sistema) aplicarOrigen(b, { tipo: 'nuevo' });
 
@@ -145,9 +179,9 @@ export async function vistaNuevo(vista) {
       vistaInicio(vista, origen => { aplicarOrigen(b, origen); guardarBorrador(); pintar(); window.scrollTo(0, 0); });
       return;
     }
-    const cli = estado.clientes[b.cliente];
+    const cli = clienteActual(b);
     const est = buscarEstablecimiento(cli, b.establecimiento);
-    const claves = Object.keys(estado.clientes);
+    const claves = cli.sistema ? [] : Object.keys(estado.clientes);
     b.extras = b.extras || {};
     const extrasTecnico = (cli.extras || []).filter(d => d.quien === QUIEN.TECNICO);
     // Un campo con una sola opción viene elegido
@@ -161,7 +195,8 @@ export async function vistaNuevo(vista) {
         <h2>Datos del remito</h2>
         ${claves.length > 1 ? `<label for="f-cliente">Cliente</label>
           <select id="f-cliente">${claves.map(k => `<option value="${esc(k)}" ${k === b.cliente ? 'selected' : ''}>${esc(estado.clientes[k].nombre)}</option>`).join('')}</select>`
-          : `<span class="etiqueta">Cliente</span><div><span class="chip">${esc(cli.nombre)}</span></div>`}
+          : `<span class="etiqueta">Cliente</span><div><span class="chip">${esc(cli.nombre)}</span>${cli.sistema
+            ? ` <small class="ayuda">${cli.claveExcel ? 'también va a su Excel' : 'del sistema'}</small>` : ''}</div>`}
         <label for="f-numero">N° de remito</label>
         <div class="fila nro-remito">
           <input id="f-pv" class="pv" inputmode="numeric" maxlength="4" value="${esc(b.pv)}" aria-label="Punto de venta">
@@ -190,16 +225,17 @@ export async function vistaNuevo(vista) {
 
       <section class="tarjeta">
         <h2>Servicios realizados</h2>
-        <p class="ayuda" style="margin:0 0 8px">Cargá lo mismo que escribiste en el remito.</p>
+        <p class="ayuda" style="margin:0 0 8px">${cli.sistema ? 'Servicios del sistema ' + (b.sistema.tipo === 'orden' ? 'de la interna' : 'de tu sector') + '. ' : ''}Cargá lo mismo que escribiste en el remito.</p>
         <div id="servicios">${htmlServicios(cli.items, b.cant)}</div>
+        <div id="lineas-serv"></div>
         <label for="f-obs">Observaciones (opcional)</label>
         <textarea id="f-obs" rows="2">${esc(b.observaciones)}</textarea>
       </section>
 
-      ${conSistema && estado.sistema.electrico ? `<section class="tarjeta">
+      ${conSistema && cli.sistema ? `<section class="tarjeta" id="sec-materiales" hidden>
         <h2>Materiales</h2>
-        <p class="ayuda" style="margin:0 0 8px">Seguridad eléctrica: cargá lo que se usó y lo que se recuperó, haya o no stock. La app no descuenta nada; el sistema lo compara después con el stock.</p>
-        <div id="materiales">${htmlMateriales(b.materiales, opcionesMateriales(b))}</div>
+        <p class="ayuda" style="margin:0 0 8px">Por cada servicio: el material nuevo de stock que se usó y el recuperado de esta empresa y línea, haya o no saldo. La app no descuenta nada; el sistema lo compara después.</p>
+        <div id="materiales"></div>
       </section>` : ''}
 
       <section class="tarjeta">
@@ -221,6 +257,61 @@ export async function vistaNuevo(vista) {
 
     pintarFotos();
     conectar();
+    pintarPorServicio();
+  }
+
+  // Servicios cargados (sin km); lo que depende de ellos se redibuja cuando cambia este conjunto
+  const serviciosCargados = () => (conSistema && deSistema(b) ? clienteActual(b).items.filter(i => !esKm(i) && +b.cant[i.cod] > 0) : []);
+  let firmaServicios = '';
+  function pintarPorServicio(forzar = true) {
+    const firma = serviciosCargados().map(i => i.cod).join('|');
+    if (!forzar && firma === firmaServicios) return;
+    firmaServicios = firma;
+    pintarLineasServicio();
+    pintarMateriales();
+  }
+
+  // Con varias líneas: a qué línea pertenece cada servicio cargado
+  function pintarLineasServicio() {
+    const cont = $('#lineas-serv', vista);
+    if (!cont) return;
+    if (!variasLineas(b)) { cont.innerHTML = ''; return; }
+    const cat = estado.sistema.catalogos;
+    const servs = serviciosCargados();
+    cont.innerHTML = servs.length ? `<h3 style="margin:10px 0 4px">¿A qué línea pertenece cada servicio?</h3>${servs.map(i => `
+      <label for="ls-${esc(i.cod)}">${esc(i.servicio)}</label>
+      <select id="ls-${esc(i.cod)}" data-linea-serv="${esc(i.servicioId)}">
+        <option value="">Elegir…</option>
+        <option value="${TODAS_LAS_LINEAS}" ${b.lineaServ[i.servicioId] === TODAS_LAS_LINEAS ? 'selected' : ''}>Todas las líneas</option>
+        ${b.sistema.lineaIds.map(id => `<option value="${esc(id)}" ${mismoId(b.lineaServ[i.servicioId], id) ? 'selected' : ''}>${esc(nombreLinea(buscarPorId(cat.lineas, id)))}</option>`).join('')}
+      </select>`).join('')}` : '';
+    cont.querySelectorAll('[data-linea-serv]').forEach(sel => sel.addEventListener('change', () => {
+      const sid = sel.dataset.lineaServ;
+      b.lineaServ[sid] = sel.value;
+      // El recuperado depende de la línea: al cambiarla se vacía el de ese servicio
+      if (b.matServ[sid]) { b.matServ[sid].recuperado = {}; b.matServ[sid].reutilizado = {}; }
+      guardarBorrador(); pintarMateriales();
+    }));
+  }
+
+  // Un bloque de materiales por cada servicio cargado que los lleva
+  function serviciosConMateriales() {
+    if (!(conSistema && deSistema(b))) return [];
+    return clienteActual(b).items.filter(i => i.materiales && +b.cant[i.cod] > 0);
+  }
+  function pintarMateriales() {
+    const sec = $('#sec-materiales', vista);
+    if (!sec) return;
+    const servs = serviciosConMateriales();
+    sec.hidden = !servs.length;
+    const cont = $('#materiales', vista);
+    cont.innerHTML = servs.map((i, n) => `<div class="bloque-material" data-serv="${esc(i.servicioId)}">
+      <h3 style="margin:8px 0 4px">${esc(i.servicio)}${i.codigo ? ` <small>(${esc(i.codigo)})</small>` : ''}</h3>
+      ${htmlMateriales(b.matServ[i.servicioId] ||= materialesVacios(), opcionesMateriales(b, i.servicioId), `m${n}`)}</div>`).join('');
+    cont.querySelectorAll('[data-serv]').forEach(bloque => {
+      const m = b.matServ[bloque.dataset.serv];
+      conectarMateriales(bloque, m, redibujar => { guardarBorrador(); if (redibujar) pintarMateriales(); });
+    });
   }
 
   async function pintarFotos() {
@@ -272,7 +363,7 @@ export async function vistaNuevo(vista) {
     });
     vista.querySelectorAll('[data-extra]').forEach(sel => sel.addEventListener('input', () => {
       b.extras[sel.dataset.extra] = sel.value;
-      const cli = estado.clientes[b.cliente];
+      const cli = clienteActual(b);
       const autos = completarAutomaticos(cli.extras, b.extras);
       $('#autos', vista).innerHTML = htmlAutomaticos(cli.extras, autos);
       guardarBorrador();
@@ -284,16 +375,20 @@ export async function vistaNuevo(vista) {
     on('#f-obs', 'input', e => { b.observaciones = e.target.value; guardarBorrador(); });
     on('#f-estab', 'input', e => {
       b.establecimiento = e.target.value;
-      const est = buscarEstablecimiento(estado.clientes[b.cliente], b.establecimiento);
+      const est = buscarEstablecimiento(clienteActual(b), b.establecimiento);
       $('#zona', vista).innerHTML = est ? `Zona <span class="chip">${esc(est.zona)}</span>` : '';
       guardarBorrador();
     });
-    conectarServicios($('#servicios', vista), b.cant, guardarBorrador);
+    conectarServicios($('#servicios', vista), b.cant, () => {
+      guardarBorrador();
+      // Aparecen o desaparecen la línea y los materiales del servicio
+      pintarPorServicio(false);
+    });
     if (conSistema) {
-      on('#btn-origen', 'click', () => { b.sistema = null; guardarBorrador(); pintar(); });
+      on('#btn-origen', 'click', () => { b.sistema = null; b.cant = {}; guardarBorrador(); pintar(); });
       on('#f-empresa', 'change', e => {
         Object.assign(b.sistema, { empresaId: e.target.value, lineaId: '', operadoraId: '' });
-        b.materiales.recuperado = {}; b.materiales.reutilizado = {};
+        b.matServ = {};
         elegirClienteDeEmpresa(b); guardarBorrador(); pintar();
       });
       on('#f-linea', 'change', e => {
@@ -301,17 +396,11 @@ export async function vistaNuevo(vista) {
         // La operadora sale de la línea; se puede cambiar a mano
         const l = buscarPorId(estado.sistema.catalogos.lineas, b.sistema.lineaId);
         if (l?.operadoraId) b.sistema.operadoraId = l.operadoraId;
-        b.materiales.recuperado = {}; b.materiales.reutilizado = {};
+        // El recuperado es de cada línea: al cambiarla se vacía
+        for (const m of Object.values(b.matServ)) { m.recuperado = {}; m.reutilizado = {}; }
         guardarBorrador(); pintar();
       });
       on('#f-operadora', 'change', e => { b.sistema.operadoraId = e.target.value; guardarBorrador(); });
-      const mat = $('#materiales', vista);
-      if (mat) {
-        conectarMateriales(mat, b.materiales, redibujar => {
-          guardarBorrador();
-          if (redibujar) mat.innerHTML = htmlMateriales(b.materiales, opcionesMateriales(b));
-        });
-      }
     }
     on('#f-camara', 'change', e => agregarFotos([...e.target.files]));
     on('#f-galeria', 'change', e => agregarFotos([...e.target.files]));
@@ -326,19 +415,23 @@ export async function vistaNuevo(vista) {
   }
 
   // Ítems cargados según el catálogo del cliente
-  const itemsCargados = () => itemsDeCantidades(estado.clientes[b.cliente].items, b.cant);
+  const itemsCargados = () => itemsDeCantidades(clienteActual(b).items, b.cant)
+    .map(i => (variasLineas(b) && i.servicioId && b.lineaServ[i.servicioId] ? { ...i, lineaId: b.lineaServ[i.servicioId] } : i));
 
   const validar = () => {
-    const err = validarCarga(b, estado.clientes[b.cliente], {
+    const err = validarCarga(b, clienteActual(b), {
       hoy: hoy(), remito: normalizarRemito(b.pv, b.numero), items: itemsCargados(),
     });
     if (conSistema) {
       // Solo el remito de una interna exige empresa y línea; el remito nuevo sigue como siempre
       if (b.sistema.tipo === 'orden') {
         if (!b.sistema.empresaId) err.unshift('Elegí la empresa.');
-        else if (!b.sistema.lineaId && lineasPosibles(b).length) err.unshift('Elegí la línea.');
+        else if (variasLineas(b)) {
+          const sinLinea = serviciosCargados().filter(i => !b.lineaServ[i.servicioId]);
+          if (sinLinea.length) err.unshift(`Elegí a qué línea pertenece: ${sinLinea.map(i => i.servicio).join(', ')}.`);
+        } else if (!b.sistema.lineaId && lineasPosibles(b).length) err.unshift('Elegí la línea.');
       }
-      if (estado.sistema.electrico) err.push(...validarMateriales(b.materiales));
+      for (const i of serviciosConMateriales()) err.push(...validarMateriales(b.matServ[i.servicioId]).map(e => `${i.servicio}: ${e}`));
     }
     return err;
   };
@@ -356,7 +449,7 @@ export async function vistaNuevo(vista) {
     btn.disabled = true;
     btn.textContent = 'Preparando…';
     try {
-      const cli = estado.clientes[b.cliente];
+      const cli = clienteActual(b);
       const remito = normalizarRemito(b.pv, b.numero);
       // Con señal, avisar enseguida si el número ya existe
       if (navigator.onLine && !b.itemId) {
@@ -390,7 +483,7 @@ export async function vistaNuevo(vista) {
           // IDs del sistema principal (Dataverse) y materiales; sin sistema quedan vacíos
           ...(conSistema ? {
             sistema: { ...b.sistema, tecnicoId: estado.sistema.usuario.id },
-            materiales: estado.sistema.electrico ? filasMateriales(b.materiales, estado.sistema.catalogos) : [],
+            materiales: filasMaterialesPorServicio(b.matServ, estado.sistema.catalogos, serviciosConMateriales().map(i => i.servicioId)),
           } : {}),
         },
         pdf: b.paginas.length ? await armarPdf(b.paginas) : null,

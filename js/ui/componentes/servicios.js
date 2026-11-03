@@ -10,7 +10,7 @@ export function htmlServicios(items, cant) {
     const v = +cant[it.cod] || 0;
     const km = esKm(it);
     return `<div class="servicio ${v > 0 ? 'marcado' : ''}" data-cod="${esc(it.cod)}">
-      <div class="nombre">${esc(nombreServicio(it))}<small>${km ? 'Kilómetros recorridos (no va a la planilla)' : 'Ítem ' + esc(it.cod)}</small></div>
+      <div class="nombre">${esc(nombreServicio(it))}<small>${km ? 'Kilómetros recorridos (no va a la planilla)' : it.servicioId ? (it.codigo ? 'Código ' + esc(it.codigo) : '') : 'Ítem ' + esc(it.cod)}</small></div>
       <div class="stepper">
         ${km ? '' : '<button type="button" data-paso="-1" aria-label="Restar">−</button>'}
         <input type="number" inputmode="numeric" min="0" class="${km ? 'km' : ''}" value="${v || ''}" placeholder="0" aria-label="Cantidad ${esc(it.servicio)}">

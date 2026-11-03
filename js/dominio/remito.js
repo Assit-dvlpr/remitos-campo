@@ -24,7 +24,7 @@ export const responsable = (tecnico, acompanante) =>
 // Cantidades por código { cod: n } -> ítems del remito [{ cod, servicio, cant }], en el orden del catálogo
 export const itemsDeCantidades = (catalogo, cant) => catalogo
   .filter(it => +cant[it.cod] > 0)
-  .map(it => ({ cod: it.cod, servicio: it.servicio, cant: +cant[it.cod] }));
+  .map(it => ({ cod: it.cod, servicio: it.servicio, cant: +cant[it.cod], ...(it.servicioId ? { servicioId: it.servicioId, codigo: it.codigo || '', ...(it.materiales ? { materiales: true } : {}) } : {}) }));
 
 // Ítems del remito -> cantidades por código
 export const cantidadesDeItems = items => Object.fromEntries((items || []).map(i => [i.cod, i.cant]));

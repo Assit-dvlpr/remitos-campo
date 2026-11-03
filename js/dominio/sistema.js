@@ -1,6 +1,6 @@
 // Reglas sobre los catálogos del sistema principal (Dataverse): sector del usuario, órdenes internas
 // que puede ver, líneas por empresa y materiales. Lógica pura: trabaja con lo que devuelve datos/dataverse.
-import { mismoId } from '../nucleo/ids.js';
+import { mismoId, idDv } from '../nucleo/ids.js';
 
 // Solo para la búsqueda por texto que escribe el usuario (no para decidir nada)
 const etiqueta = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '').toLowerCase();
@@ -86,11 +86,29 @@ export function filtrarOrdenes(ordenes, texto) {
 export const materialesDeStock = cat => (cat.materialesStock || [])
   .slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
-// Material recuperado del catálogo para una empresa y línea de origen
-// Material recuperado: todos los de la empresa, haya o no saldo; primero los de la línea del remito
+// Saldo de un material recuperado en una empresa y línea: suma de sus movimientos (solo para mostrar)
+export const saldoRecuperado = (cat, materialId, empresaId, lineaId) => Math.round((cat.movimientosRecuperado || [])
+  .filter(x => mismoId(x.materialId, materialId) && mismoId(x.empresaId, empresaId) && mismoId(x.lineaId, lineaId))
+  .reduce((t, x) => t + (+x.cantidad || 0), 0) * 100) / 100;
+
+// Material recuperado: cada empresa y línea tiene el suyo (como en ALO Manager). Se muestran todos, haya o no saldo,
+// con el saldo al lado. Sin línea elegida, los de toda la empresa.
 export const materialesRecuperadosDe = (cat, empresaId, lineaId) => (cat.materialesRecuperados || [])
-  .filter(m => !empresaId || mismoId(m.empresaId, empresaId))
-  .sort((a, b) => (mismoId(b.lineaId, lineaId) - mismoId(a.lineaId, lineaId)) || a.nombre.localeCompare(b.nombre, 'es'));
+  .filter(m => (!empresaId || mismoId(m.empresaId, empresaId)) && (!lineaId || mismoId(m.lineaId, lineaId)))
+  .map(m => ({ ...m, saldo: saldoRecuperado(cat, m.id, m.empresaId, m.lineaId) }))
+  .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+// Código interno normalizado, con los mismos alias que ALO Manager
+const ALIAS_CODIGO = { mon: 'MONT', mont: 'MONT', montaje: 'MONT', dmon: 'DMONT', dmont: 'DMONT', desm: 'DMONT', desmontaje: 'DMONT' };
+export const codigoServicio = s => {
+  const c = etiqueta(s?.codigoInterno || s?.codigo);
+  return ALIAS_CODIGO[c] || c.toUpperCase();
+};
+// Montaje y Desmontaje llevan materiales; los demás, si tienen "Requiere recuento". Mismo criterio que ALO Manager.
+export function llevaMateriales(s) {
+  if (!s || s.recuento === false) return false;
+  return ['MONT', 'DMONT'].includes(codigoServicio(s)) || s.recuento === true;
+}
 
 // Datos del sistema guardados en un remito (IDs) -> nombres para mostrar. Sin catálogos, queda vacío.
 export function resumenSistema(cat, sistema) {
@@ -103,7 +121,7 @@ export function resumenSistema(cat, sistema) {
     interna: orden ? orden.numero || orden.numeroALO || '' : '',
     solicitud: sol ? [sol.numero, sol.numeroExterno].filter(Boolean).join(' · ') : '',
     empresa: buscarPorId(c.empresas, sistema.empresaId)?.nombre || '',
-    linea: nombreLinea(buscarPorId(c.lineas, sistema.lineaId)),
+    linea: (sistema.lineaIds?.length > 1 ? sistema.lineaIds : [sistema.lineaId]).map(id => nombreLinea(buscarPorId(c.lineas, id))).filter(Boolean).join(' · '),
     operadora: buscarPorId(c.operadoras, sistema.operadoraId)?.nombre || '',
     sector: buscarPorId(c.sectores, sistema.sectorId)?.nombre || '',
   };
@@ -113,3 +131,41 @@ export function resumenSistema(cat, sistema) {
 export const acompanantesPosibles = (cat, usuarioId, ref) => (cat.usuarios || [])
   .filter(u => !mismoId(u.id, usuarioId) && usuarioHabilitado(u, ref))
   .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+// ---------- Remito del sistema: cliente = empresa de Dataverse, ítems = servicios de Dataverse ----------
+
+export const ITEM_KM = Object.freeze({ cod: 'KM', servicio: 'KILÓMETROS', planilla: false, unidad: 'km' });
+const porNombre = (a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es');
+
+// Servicios que se ofrecen: los de la interna; si no tiene, los del sector; si el sector no tiene, todos
+export function serviciosParaRemito(cat, sistema) {
+  const c = cat || {};
+  const orden = buscarPorId(c.ordenesInternas, sistema?.ordenId);
+  const deOrden = orden ? serviciosDeOrden(c, orden).map(x => x.servicio).filter(Boolean) : [];
+  if (deOrden.length) return deOrden.slice().sort(porNombre);
+  const activos = (c.servicios || []).filter(x => x.activo !== false);
+  const deSector = activos.filter(x => mismoId(x.sectorId, sistema?.sectorId));
+  return (deSector.length ? deSector : activos).slice().sort(porNombre);
+}
+
+// Cliente "virtual" de un remito del sistema. Los ítems se identifican por el GUID del servicio.
+// Si hay un cliente configurado con Excel para esa empresa, se usan sus campos y establecimientos,
+// y al aprobar también se escribe su Excel. cargados: ítems ya cargados (no se pierden si salen del catálogo).
+export function clienteDelSistema(cat, sistema, clientes, cargados = []) {
+  const empresa = buscarPorId(cat?.empresas, sistema?.empresaId);
+  const claveExcel = Object.keys(clientes || {}).find(k => mismoId(clientes[k].empresaId, sistema?.empresaId)) || '';
+  const conExcel = claveExcel ? clientes[claveExcel] : null;
+  const items = serviciosParaRemito(cat, sistema).map(x => ({
+    cod: idDv(x.id), codigo: x.codigoInterno || x.codigo || '', servicio: x.nombre, servicioId: idDv(x.id), materiales: llevaMateriales(x),
+  }));
+  for (const i of cargados || []) {
+    if (i.servicioId && !items.some(x => mismoId(x.servicioId, i.servicioId))) {
+      items.push({ cod: i.cod, codigo: i.codigo || '', servicio: i.servicio, servicioId: idDv(i.servicioId), materiales: Boolean(i.materiales) });
+    }
+  }
+  return {
+    sistema: true, claveExcel, nombre: empresa?.nombre || conExcel?.nombre || 'Empresa del sistema',
+    items: [...items, ITEM_KM], extras: conExcel?.extras || [], establecimientos: conExcel?.establecimientos || [],
+    responsable: conExcel?.responsable, excel: conExcel?.excel || null,
+  };
+}

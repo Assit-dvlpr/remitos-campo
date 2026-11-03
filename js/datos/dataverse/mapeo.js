@@ -37,7 +37,13 @@ export const MAPEOS = {
     grupo: formateado(f, 'cr1d0_grupodetrabajo') || '',
   }),
   sectores: f => ({ id: idDv(f.cr1d0_generalsectoresid), nombre: f.cr1d0_nombre || '', codigo: f.cr1d0_codigo || '', activo: activo(f) }),
-  servicios: f => ({ id: idDv(f.cr1d0_generalservicioid), codigo: f.cr1d0_codigo || '', nombre: f.cr1d0_nombre || '', sectorId: lookupId(f, 'cr1d0_sector'), activo: activo(f) }),
+  servicios: f => ({
+    id: idDv(f.cr1d0_generalservicioid), codigo: f.cr1d0_codigo || '', nombre: f.cr1d0_nombre || '', sectorId: lookupId(f, 'cr1d0_sector'),
+    // Mismas columnas que lee ALO Manager: código interno (MONT, DMONT…) y "Requiere recuento"
+    codigoInterno: valor(f, 'cr1d0_Codigointernoexterno', 'cr1d0_CodigoInternoExterno', 'cr1d0_codigointernoexterno', 'cr1d0_CodigoInterno',
+      'cr1d0_Codigointerno', 'cr1d0_codigointerno', 'cr1d0_codigoInterno', 'cr1d0_CdigoInterno', 'cr1d0_Cdigointerno', 'cr1d0_cdigointerno'),
+    recuento: f.cr1d0_recuento ?? null, activo: activo(f),
+  }),
   solicitudes: f => ({
     id: idDv(f.cr1d0_generalsolicitudid), numero: f.cr1d0_nrosolicitudsistema || '', numeroExterno: f.cr1d0_nrosolicitudexterno || '',
     empresaId: lookupId(f, 'cr1d0_clienteempresaid'), empresa: lookupNombre(f, 'cr1d0_clienteempresaid'),
@@ -61,6 +67,11 @@ export const MAPEOS = {
     id: idDv(f.cr1d0_generalstockmaterialid), nombre: valor(f, 'cr1d0_nombredelmaterial', 'cr1d0_Nombredelmaterial', m?.PrimaryNameAttribute, 'cr1d0_nombre'),
     codigo: valor(f, 'cr1d0_codigo', 'cr1d0_Codigo'), unidad: valor(f, 'cr1d0_unidad', 'cr1d0_Unidad') || 'UN',
     sectorId: lookupId(f, 'cr1d0_generalsectores') || lookupId(f, 'cr1d0_sector'), activo: activo(f),
+  }),
+  // Movimientos de material recuperado (para mostrar el saldo por empresa y línea; la app no los escribe)
+  movimientosRecuperado: f => ({
+    id: idDv(f.cr1d0_generalcablerecuperadomovimientoid), materialId: lookupId(f, 'cr1d0_materialreferencia'),
+    empresaId: lookupId(f, 'cr1d0_empresa'), lineaId: lookupId(f, 'cr1d0_linea'), cantidad: Number(f.cr1d0_metros) || 0, activo: activo(f),
   }),
   materialesRecuperados: (f, m) => ({
     id: idDv(f[m.PrimaryIdAttribute]), nombre: f[m.PrimaryNameAttribute] || '', unidad: f.cr1d0_unidad || '',

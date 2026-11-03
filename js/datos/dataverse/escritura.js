@@ -86,11 +86,12 @@ async function cuerpo(def, valores) {
   return c;
 }
 
-export const guidRemito = r => guidEstable(semillaRemito(r));
+// sufijo: la línea, cuando el remito tiene varias (un registro por línea)
+export const guidRemito = (r, sufijo = '') => guidEstable(semillaRemito(r) + (sufijo ? ':' + sufijo : ''));
 
-// Crea o actualiza el remito y sus filas. registro = dominio/intermedia.registroIntermedio(...)
-export async function escribirIntermedia(r, registro) {
-  const id = await guidRemito(r);
+// Crea o actualiza el remito y sus filas. registro = dominio/intermedia.registrosIntermedios(...)[n]
+export async function escribirIntermedia(r, registro, sufijo = registro.sufijo || '') {
+  const id = await guidRemito(r, sufijo);
   const cab = await esquema(INTERMEDIA.tabla);
   await pedir('PATCH', `${API()}/${cab.set}(${id})`, await cuerpo(INTERMEDIA, registro.cabecera));
   const det = await esquema(DETALLE.tabla);
@@ -103,8 +104,8 @@ export async function escribirIntermedia(r, registro) {
 }
 
 // Solo cambia el estado (y datos de revisión) de un remito ya escrito
-export async function estadoIntermedia(r, valores) {
-  const id = await guidRemito(r);
+export async function estadoIntermedia(r, valores, sufijo = '') {
+  const id = await guidRemito(r, sufijo);
   const cab = await esquema(INTERMEDIA.tabla);
   await pedir('PATCH', `${API()}/${cab.set}(${id})`, await cuerpo(INTERMEDIA, valores));
   return id;

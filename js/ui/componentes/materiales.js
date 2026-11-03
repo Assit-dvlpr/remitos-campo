@@ -3,17 +3,18 @@
 import { esc } from '../../nucleo/texto.js';
 import { TIPOS_MATERIAL } from '../../dominio/materiales.js';
 
-const nombreMat = m => `${m.nombre}${m.codigo ? ` (${m.codigo})` : ''} · ${m.unidad || 'UN'}`;
+const nombreMat = m => `${m.nombre}${m.codigo ? ` (${m.codigo})` : ''} · ${m.unidad || 'UN'}${m.saldo !== undefined ? ` · disponible ${m.saldo}` : ''}`;
 
 // opciones = { stock: [...], recuperado: [...], reutilizado: [...] } materiales disponibles por tipo
-export function htmlMateriales(materiales, opciones) {
+// prefijo: distingue los bloques cuando hay uno por servicio en la misma pantalla
+export function htmlMateriales(materiales, opciones, prefijo = 'm') {
   return Object.entries(TIPOS_MATERIAL).map(([tipo, def]) => {
     const lista = opciones[tipo] || [];
     const elegidos = Object.keys(materiales[tipo] || {});
     return `<div class="grupo-material" data-tipo="${tipo}">
-      <label for="m-${tipo}">${esc(def.etiqueta)}</label>
+      <label for="${prefijo}-${tipo}">${esc(def.etiqueta)}</label>
       ${lista.length ? `<div class="fila">
-        <select id="m-${tipo}"><option value="">Elegir material…</option>
+        <select id="${prefijo}-${tipo}" data-elegir><option value="">Elegir material…</option>
           ${lista.filter(m => !elegidos.includes(m.id)).map(m => `<option value="${esc(m.id)}">${esc(nombreMat(m))}</option>`).join('')}
         </select>
         <button type="button" data-agregar="${tipo}">Agregar</button></div>`
@@ -21,7 +22,7 @@ export function htmlMateriales(materiales, opciones) {
       ${elegidos.map(id => {
         const m = lista.find(x => x.id === id) || { nombre: 'Material ya no disponible', unidad: '' };
         return `<div class="servicio marcado" data-material="${esc(id)}">
-          <div class="nombre">${esc(m.nombre)}<small>${esc(m.unidad || '')}</small></div>
+          <div class="nombre">${esc(m.nombre)}<small>${esc(m.unidad || '')}${m.saldo !== undefined ? ` · disponible ${esc(m.saldo)}` : ''}</small></div>
           <div class="stepper"><input type="number" inputmode="decimal" min="0" step="any" value="${esc(materiales[tipo][id])}" aria-label="Cantidad ${esc(m.nombre)}">
           <button type="button" data-quitar aria-label="Quitar">✕</button></div></div>`;
       }).join('')}
@@ -35,7 +36,7 @@ export function conectarMateriales(raiz, materiales, alCambiar) {
     const tipo = e.target.closest('[data-tipo]')?.dataset.tipo;
     if (!tipo) return;
     if (e.target.matches('[data-agregar]')) {
-      const id = raiz.querySelector(`#m-${tipo}`).value;
+      const id = e.target.closest('[data-tipo]').querySelector('[data-elegir]').value;
       if (!id) return;
       materiales[tipo][id] = '';
       alCambiar(true);
@@ -53,9 +54,14 @@ export function conectarMateriales(raiz, materiales, alCambiar) {
   });
 }
 
-// Resumen de solo lectura: filas [{ tipo, nombre, unidad, cant }] agrupadas por tipo
-export function htmlResumenMateriales(filas) {
+// Resumen de solo lectura: filas [{ tipo, nombre, unidad, cant, servicioId }] agrupadas por servicio y tipo
+export function htmlResumenMateriales(filas, items = []) {
   if (!filas?.length) return '<p class="ayuda" style="margin:0">Sin materiales cargados.</p>';
+  const servicios = [...new Set(filas.map(f => f.servicioId || ''))];
+  if (servicios.length > 1 || servicios[0]) {
+    return servicios.map(sid => `<h3 style="margin:6px 0 2px">${esc(items.find(i => i.servicioId === sid)?.servicio || 'Sin servicio')}</h3>
+      ${htmlResumenMateriales(filas.filter(f => (f.servicioId || '') === sid).map(({ servicioId, ...f }) => f))}`).join('');
+  }
   return Object.entries(TIPOS_MATERIAL).map(([tipo, def]) => {
     const deTipo = filas.filter(f => f.tipo === tipo);
     return deTipo.length ? `<label>${esc(def.etiqueta)}</label>

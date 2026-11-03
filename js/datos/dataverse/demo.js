@@ -6,7 +6,7 @@ const OP = { ypf: id(20), pae: id(21) };
 const LIN = { norte: id(30), sur: id(31), otra: id(32) };
 const SOL = { a: id(40), b: id(41), c: id(42) };
 const OI = { a: id(50), b: id(51), c: id(52), cerrada: id(53) };
-const SERV = { pat: id(60), ilum: id(61), ruido: id(62) };
+const SERV = { pat: id(60), ilum: id(61), ruido: id(62), mont: id(63), dmont: id(64) };
 
 // El usuario demo es del sector eléctrico, para ver la sección de materiales
 const USUARIO = { id: id(99), email: 'demo@alonger.com.ar', nombre: 'Usuario Demo', rolId: '', rol: 'Tecnico', estadoValor: 1, estado: 'Activo', sectorId: SEC.elec, grupo: '' };
@@ -31,6 +31,8 @@ const CATALOGOS = {
     { id: SERV.pat, codigo: '10', nombre: 'Medición de puesta a tierra', sectorId: SEC.elec, activo: true },
     { id: SERV.ilum, codigo: '50', nombre: 'Iluminación', sectorId: SEC.hys, activo: true },
     { id: SERV.ruido, codigo: '40', nombre: 'Nivel sonoro', sectorId: SEC.hys, activo: true },
+    { id: SERV.mont, codigo: '20', codigoInterno: 'MONT', nombre: 'Montaje de puesta a tierra', sectorId: SEC.elec, recuento: null, activo: true },
+    { id: SERV.dmont, codigo: '21', codigoInterno: 'DMONT', nombre: 'Desmontaje de puesta a tierra', sectorId: SEC.elec, recuento: null, activo: true },
   ],
   solicitudes: [
     { id: SOL.a, numero: 'GEN-2026-0101', numeroExterno: 'OC 4500123', empresaId: E.demo, empresa: 'Cliente Demo', ubicacion: 'Planta Demo Norte', estado: 'En curso', activo: true },
@@ -39,11 +41,14 @@ const CATALOGOS = {
   ],
   solicitudServicios: [
     { id: id(70), solicitudId: SOL.a, servicioId: SERV.pat, sectorId: SEC.elec, ordenInternaId: OI.a, activo: true },
+    { id: id(73), solicitudId: SOL.a, servicioId: SERV.mont, sectorId: SEC.elec, ordenInternaId: OI.a, activo: true },
+    { id: id(74), solicitudId: SOL.a, servicioId: SERV.dmont, sectorId: SEC.elec, ordenInternaId: OI.a, activo: true },
     { id: id(71), solicitudId: SOL.b, servicioId: SERV.ilum, sectorId: SEC.hys, ordenInternaId: '', activo: true },
     { id: id(72), solicitudId: SOL.c, servicioId: SERV.pat, sectorId: SEC.elec, ordenInternaId: OI.c, activo: true },
   ],
   solicitudLineas: [
     { id: id(80), solicitudId: SOL.a, lineaId: LIN.norte, ordenInternaId: OI.a, activo: true },
+    { id: id(82), solicitudId: SOL.a, lineaId: LIN.sur, ordenInternaId: OI.a, activo: true },
     { id: id(81), solicitudId: SOL.b, lineaId: LIN.sur, ordenInternaId: '', activo: true },
   ],
   ordenesInternas: [
@@ -59,6 +64,13 @@ const CATALOGOS = {
   ],
   materialesRecuperados: [
     { id: id(95), nombre: 'Cable Cu recuperado 35 mm²', unidad: 'M', empresaId: E.demo, lineaId: LIN.norte, activo: true },
+    { id: id(96), nombre: 'Cable Cu recuperado 35 mm²', unidad: 'M', empresaId: E.demo, lineaId: LIN.sur, activo: true },
+  ],
+  // Saldo del recuperado: 200 m en la línea Norte, 150 m en la Sur
+  movimientosRecuperado: [
+    { id: id(110), materialId: id(95), empresaId: E.demo, lineaId: LIN.norte, cantidad: 260, activo: true },
+    { id: id(111), materialId: id(95), empresaId: E.demo, lineaId: LIN.norte, cantidad: -60, activo: true },
+    { id: id(112), materialId: id(96), empresaId: E.demo, lineaId: LIN.sur, cantidad: 150, activo: true },
   ],
 };
 

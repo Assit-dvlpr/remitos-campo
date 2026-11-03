@@ -9,6 +9,21 @@ export const TIPOS_MATERIAL = Object.freeze({
 
 export const materialesVacios = () => ({ stock: {}, recuperado: {}, reutilizado: {} });
 
+// Por servicio: { servicioId: { tipo: { id: cant } } } -> filas con el servicio al que pertenecen
+export function filasMaterialesPorServicio(porServicio, catalogos, servicioIds) {
+  return Object.entries(porServicio || {}).filter(([sid]) => !servicioIds || servicioIds.includes(sid))
+    .flatMap(([servicioId, m]) => filasMateriales(m, catalogos).map(f => ({ ...f, servicioId })));
+}
+// Filas -> { servicioId: { tipo: { id: cant } } } (filas sin servicio quedan bajo '')
+export function materialesPorServicioDeFilas(filas) {
+  const r = {};
+  for (const f of filas || []) {
+    const m = (r[f.servicioId || ''] ||= materialesVacios());
+    if (m[f.tipo]) m[f.tipo][f.materialId] = f.cant;
+  }
+  return r;
+}
+
 // { tipo: { id: cant } } -> [{ tipo, materialId, nombre, unidad, cant }] usando los catálogos para nombre y unidad
 export function filasMateriales(materiales, catalogos) {
   const filas = [];
@@ -17,7 +32,7 @@ export function filasMateriales(materiales, catalogos) {
     for (const [materialId, cant] of Object.entries(cantidades || {})) {
       if (!(+cant > 0)) continue;
       const m = lista.find(x => x.id === materialId);
-      filas.push({ tipo, materialId, nombre: m?.nombre || '', unidad: m?.unidad || '', cant: +cant });
+      filas.push({ tipo, materialId, nombre: m?.nombre || '', unidad: m?.unidad || '', cant: +cant, ...(m?.lineaId ? { lineaId: m.lineaId } : {}) });
     }
   }
   return filas;

@@ -57,8 +57,8 @@ test('órdenes abiertas del sector, con solicitud, empresa, líneas y servicios'
   const o = ordenesAbiertas(cat, { sectorId: SEC_ELEC, ref });
   assert.deepEqual(o.map(x => x.numero), ['INT-0501', 'INT-0503']);
   assert.equal(o[0].empresa.nombre, 'Cliente Demo');
-  assert.deepEqual(o[0].lineas.map(l => l.nombre), ['Oleoducto Demo Norte']);
-  assert.deepEqual(o[0].servicios.map(s => s.servicio.nombre), ['Medición de puesta a tierra']);
+  assert.deepEqual(o[0].lineas.map(l => l.nombre), ['Oleoducto Demo Norte', 'Gasoducto Demo Sur']);
+  assert.deepEqual(o[0].servicios.map(s => s.servicio.nombre), ['Medición de puesta a tierra', 'Montaje de puesta a tierra', 'Desmontaje de puesta a tierra']);
   assert.equal(ordenesAbiertas(cat, { sectorId: SEC_ELEC, verTodas: true, ref }).length, 3);
 });
 

@@ -91,6 +91,8 @@ async function iniciar() {
         return;
       }
     }
+    if (estado.sistema?.faltan?.length) $('#banner').insertAdjacentHTML('beforeend',
+      `<div class="banner">Sin referencias (${esc(estado.sistema.faltan.join(', '))}): se muestran todas las internas. Es opcional; se eligen en Configuración → Sistema.</div>`);
     if (estado.sistema?.catalogos.avisos?.length) console.warn('Dataverse:', estado.sistema.catalogos.avisos);
   }
   try {

@@ -28,7 +28,8 @@ export const guardarReferenciasPrueba = ref => recordar('referencias-prueba', re
 export async function cargarSistema(email) {
   const ref = await referencias();
   const faltan = referenciasFaltantes(ref);
-  if (faltan.length) {
+  // En la prueba se entra igual: sin referencias no se filtran internas ni usuarios y nadie es del sector eléctrico
+  if (faltan.length && !MODO_PRUEBA_DV) {
     const e = new Error(`Falta configurar en config.js (dataverse.referencias): ${faltan.join(', ')}.`);
     e.codigo = 'REFERENCIAS';
     throw e;
@@ -47,7 +48,8 @@ export async function cargarSistema(email) {
   }
   // Sin alta en el sistema principal: funcionamiento de siempre (algunos sectores trabajan así)
   if (!usuario) return null;
-  if (!usuarioHabilitado(usuario, ref)) throw new Error(`Tu usuario del sistema principal está "${usuario.estado}". Pedile al administrador que lo habilite.`);
+  const sinFiltroUsuario = MODO_PRUEBA_DV && !ref.usuarioEstadosHabilitados?.length;
+  if (!sinFiltroUsuario && !usuarioHabilitado(usuario, ref)) throw new Error(`Tu usuario del sistema principal está "${usuario.estado}". Pedile al administrador que lo habilite.`);
   const sector = buscarPorId(catalogos.sectores, usuario.sectorId);
-  return { usuario, sector, electrico: esSectorElectrico(usuario.sectorId, ref), catalogos, ref, sinSenal };
+  return { usuario, sector, electrico: esSectorElectrico(usuario.sectorId, ref), catalogos, ref, sinSenal, faltan };
 }
